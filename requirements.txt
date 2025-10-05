@@ -1,9 +1,9 @@
 Django>=5.0
-web3>=6.0.0
-py-solc-x>=1.1.1
-python-dotenv>=1.0.1
-eth-account>=0.10.0
+web3>=7.0.0
+py-solc-x>=2.0.0
+python-dotenv>=1.1.1
+eth-account>=0.13.0
 psycopg2-binary>=2.9.10
-gunicorn>23.0.0
-whitenoise>=6.11.0
-gevent>=25.9.1
+gunicorn>=23.0.0,<24.0.0
+whitenoise>=6.0.0
+gevent>=21.12.0
