@@ -1,7 +1,6 @@
 {% load static %}
 {% include "includes/header.html" %}
 
-<!-- Active Contracts Tab -->
 <div id="active-content" class="tab-content">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -9,106 +8,164 @@
             <p class="text-white opacity-75">Currently monitored shipments</p>
         </div>
         <div>
-            <a href="#" class="btn btn-primary px-4 py-2 fw-semibold shadow-sm">
-                <i class="bi bi-plus-lg me-2"></i> Create Contract
-            </a>
+           <button 
+            type="button" 
+            class="btn btn-primary px-4 py-2 fw-semibold shadow-sm" 
+            data-bs-toggle="modal" 
+            data-bs-target="#createContractModal"
+        >
+            <i class="bi bi-plus-lg me-2"></i> Create Contract
+        </button>
         </div>
     </div>
 
     <div class="row g-4">
-        <!-- Contract Card #1 -->
-        <div class="col-lg-4 col-md-6">
-            <div class="contract-card p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge bg-success px-3 py-2 rounded-pill">Active</span>
-                    <div class="pulse-dot bg-success rounded-circle" style="width: 8px; height: 8px;"></div>
-                </div>
-                <h5 class="fw-bold text-dark mb-2">Contract #SC-001</h5>
-                <p class="text-muted mb-3">Pfizer COVID-19 Vaccines</p>
-
-                <div class="row g-3 mb-4">
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-success">-1.2°C</div>
-                        <small class="text-muted">Current Temp</small>
+        
+        {% for item in contracts %}
+        {% with contract=item.contract status_class=item.status_class %}
+        
+            <div class="col-lg-4 col-md-6">
+                <div class="contract-card p-4">
+                    
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="badge bg-{{ status_class }} px-3 py-2 rounded-pill">{{ item.status }}</span>
+                        
+                        {% if item.status == 'Alert' %}
+                            <i class="bi bi-exclamation-triangle text-{{ status_class }}"></i>
+                        {% else %}
+                            <div class="pulse-dot bg-{{ status_class }} rounded-circle" style="width: 8px; height: 8px;"></div>
+                        {% endif %}
                     </div>
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-primary">72h</div>
-                        <small class="text-muted">Time Remaining</small>
-                    </div>
-                </div>
+                    
+                    <h5 class="fw-bold text-dark mb-1">
+                        {{ contract.product_name }}
+                    </h5>
 
-                <div class="progress mb-3" style="height: 8px;">
-                    <div class="progress-bar bg-success" style="width: 65%;"></div>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <small class="text-muted">Progress: 65%</small>
-                    <small class="text-muted">Est. delivery: 3 days</small>
+                    <div class="mb-4" style="max-width: 100%;">
+                        {% if contract.contract_address and contract.contract_address != '0x' %}
+                            <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">Contract Address:</small>
+                            <code class="d-block text-truncate fw-semibold text-dark" style="font-size: 0.8rem;">
+                                {{ contract.contract_address }}
+                            </code>
+                        {% else %}
+                            <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">Contract Address:</small>
+                            <p class="text-danger fw-semibold mb-0" style="font-size: 0.8rem;">Not Deployed / Missing</p>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex justify-content-between align-items-end mb-3">
+                        <div>
+                            <span class="display-6 fw-bold text-dark">{{ item.current_temp }}</span>
+                            <small class="text-muted d-block">Current Temp</small>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">{{ contract.end_date|date:"M d, Y" }}</span>
+                            <small class="text-muted">Time Remaining</small>
+                        </div>
+                    </div>
+
+                    <div class="progress mb-3" style="height: 8px;">
+                        <div class="progress-bar bg-{{ status_class }}" style="width: {{ item.progress_percent|default:"0" }}%;"></div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Progress: {{ item.progress_percent|default:"0" }}%</small>
+                        <small class="text-muted">
+                            {% if item.status == 'Alert' %}
+                                <span class="text-warning">Temperature breach detected</span>
+                            {% else %}
+                                On schedule
+                            {% endif %}
+                        </small>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+    
+    <form method="post" action="{% url 'process_contract_action' contract_id=contract.contract_id %}" class="w-50">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="complete">
+        <button type="submit" class="btn btn-success fw-semibold btn-sm w-100" 
+                onclick="return confirm('Confirm payment to the Seller (Success)? This cannot be undone.')">
+            Success
+        </button>
+    </form>
+    
+    <form method="post" action="{% url 'process_contract_action' contract_id=contract.contract_id %}" class="w-50">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="refund">
+        <button type="submit" class="btn btn-danger fw-semibold btn-sm w-100" 
+                onclick="return confirm('Confirm refund to the Buyer? This cannot be undone.')">
+            Refund
+        </button>
+    </form>
+
+</div>
+
                 </div>
             </div>
+            
+        {% endwith %} 
+        
+        {% empty %}
+            <div class="col-12">
+                <p class="text-white opacity-75">No active contracts found in the database.</p>
+            </div>
+        {% endfor %}
         </div>
+</div>
 
-        <!-- Contract Card #2 -->
-        <div class="col-lg-4 col-md-6">
-            <div class="contract-card p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge bg-warning px-3 py-2 rounded-pill">Alert</span>
-                    <i class="bi bi-exclamation-triangle text-warning"></i>
+<div class="modal fade" id="createContractModal" tabindex="-1" aria-labelledby="createContractModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'create_contract' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createContractModalLabel">Deploy New Escrow Contract</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <h5 class="fw-bold text-dark mb-2">Contract #SC-002</h5>
-                <p class="text-muted mb-3">Moderna mRNA Vaccines</p>
-
-                <div class="row g-3 mb-4">
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-warning">-8.1°C</div>
-                        <small class="text-muted">Current Temp</small>
-                    </div>
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-primary">24h</div>
-                        <small class="text-muted">Time Remaining</small>
-                    </div>
-                </div>
-
-                <div class="progress mb-3" style="height: 8px;">
-                    <div class="progress-bar bg-warning" style="width: 85%;"></div>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <small class="text-muted">Progress: 85%</small>
-                    <small class="text-warning">Temperature breach detected</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Contract Card #3 -->
-        <div class="col-lg-4 col-md-6">
-            <div class="contract-card p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge bg-success px-3 py-2 rounded-pill">Active</span>
-                    <div class="pulse-dot bg-success rounded-circle" style="width: 8px; height: 8px;"></div>
-                </div>
-                <h5 class="fw-bold text-dark mb-2">Contract #SC-003</h5>
-                <p class="text-muted mb-3">Johnson & Johnson Vaccines</p>
-
-                <div class="row g-3 mb-4">
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-success">-2.8°C</div>
-                        <small class="text-muted">Current Temp</small>
-                    </div>
-                    <div class="col-6 text-center">
-                        <div class="fw-bold text-primary">5d</div>
-                        <small class="text-muted">Time Remaining</small>
+                <div class="modal-body">
+                    <p class="text-muted">Enter shipment and payment details. A contract will be deployed to Sepolia.</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-dark mb-3">Addresses</h6>
+                            <div class="mb-3">
+                                <label for="buyer_address" class="form-label">Buyer Address</label>
+                                <input type="text" class="form-control" id="buyer_address" name="buyer_address" placeholder="0x..." required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="seller_address" class="form-label">Seller Address</label>
+                                <input type="text" class="form-control" id="seller_address" name="seller_address" placeholder="0x..." required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="quantity" class="form-label">Quantity (Units)</label>
+                                <input type="number" class="form-control" id="quantity" name="quantity" value="100" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-dark mb-3">Terms</h6>
+                            <div class="mb-3">
+                                <label for="payment_amount" class="form-label">Price / Payment Amount (ETH)</label>
+                                <input type="number" class="form-control" id="payment_amount" name="payment_amount" value="20.00" step="0.01" required>
+                                <small class="text-muted">Will be held in escrow.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="vaccine_select" class="form-label">Select Product Name</label>
+                                <select class="form-select" id="vaccine_select" name="product_name" required>
+                                    <option value="Pfizer-BioNTech" selected>Pfizer-BioNTech</option>
+                                    <option value="Moderna">Moderna</option>
+                                    <option option value="AstraZeneca">AstraZeneca</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="progress mb-3" style="height: 8px;">
-                    <div class="progress-bar bg-success" style="width: 30%;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Confirm & Deploy Contract</button>
                 </div>
-                <div class="d-flex justify-content-between">
-                    <small class="text-muted">Progress: 30%</small>
-                    <small class="text-muted">On schedule</small>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 </div>
+
 
 {% include "includes/footer.html" %}
