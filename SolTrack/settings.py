@@ -96,6 +96,7 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),  # must be your Supabase host, e.g., db.<hash>.supabase.co
         'PORT': os.getenv('DB_PORT', '5432'),
+        "OPTIONS": {"sslmode": "require"},  # important for Supabase
     }
 }
 
