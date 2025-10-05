@@ -64,7 +64,8 @@
                     </div>
 
                     <div class="progress mb-3" style="height: 8px;">
-                        <div class="progress-bar bg-{{ status_class }}" style="width: {{ item.progress_percent|default:'0' }}%;"></div>
+                        <div class="progress-bar bg-{{ status_class }}" style="width: {{ item.progress_percent|default_if_none:0 }}%;"></div>
+
                     </div>
                     <div class="d-flex justify-content-between">
                         <small class="text-muted">Progress: {{ item.progress_percent|default:"0" }}%</small>

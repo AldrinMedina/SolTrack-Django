@@ -4,5 +4,6 @@ py-solc-x>=1.1.1
 python-dotenv>=1.0.1
 eth-account>=0.10.0
 psycopg2-binary>=2.9.10
-gunicorn
+gunicorn>23.0.0
 whitenoise>=6.11.0
+gevent>=25.9.1
