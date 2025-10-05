@@ -1,0 +1,368 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soltrack | Smarter Vaccine Logistics</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    {% include 'includes/navbar.html' %}
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-gradient d-flex align-items-center" style="min-height: 100vh; padding-top: 80px;">
+        <div class="container">
+            <div class="row align-items-center">
+                <!-- Left Content -->
+                <div class="col-lg-6 fade-in-left">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="pulse-dot bg-success rounded-circle me-3" style="width: 12px; height: 12px;"></div>
+                        <small class="text-white-50 fw-medium">Live Vaccine Tracking</small>
+                    </div>
+                    
+                    <h1 class="display-3 fw-bold text-white mb-4 lh-1">
+                        Revolutionizing Vaccine Logistics
+                    </h1>
+                    <h2 class="display-3 fw-bold mb-4 lh-1" style="background: linear-gradient(to right, #fbbf24, #cee80eff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        with IoT & Blockchain Security
+                    </h2>
+                    
+                    <p class="lead text-white mb-4" style="opacity: 0.9;">
+                        Soltrack ensures safe, tamper-proof delivery of temperature-sensitive vaccines — from factory to facility with real-time monitoring and smart contract automation.
+                    </p>
+                    
+                    <!-- CTA Buttons -->
+                    <div class="d-flex gap-3 flex-wrap">
+                        <button class="btn btn-primary-custom btn-lg px-4 py-3 rounded-4" onclick="connectMetaMask()">
+                            <i class="fas fa-rocket me-2"></i>Get Started
+                        </button>
+                        <button class="btn btn-glass btn-lg px-4 py-3 rounded-4" onclick="scrollToFeatures()">
+                            <i class="fas fa-book-open me-2"></i>Learn More
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Right Content -->
+                <div class="col-lg-6 fade-in-right text-center">
+                    <img src="{% static 'img/banner.png' %}" 
+                         alt="Soltrack Dashboard" 
+                         class="img-fluid floating-animation rounded-4 shadow-lg" 
+                         style="max-width: 500px;">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-5" style="background: #0f172a;">
+        <div class="container">
+            <div class="row g-4">
+                <div class="col-lg-3 col-md-6">
+                    <div class="card metric-card rounded-4 text-center p-4 h-100 fade-in-up">
+                        <i class="fas fa-dollar-sign fa-icon-stats mb-3"></i>
+                        <h3 class="fw-bold text-warning mb-2">$2.3B+</h3>
+                        <p class="small mb-0" style="opacity: 0.8;">Lost Annually Due to Cold Chain Failures</p>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card metric-card rounded-4 text-center p-4 h-100 fade-in-up" style="animation-delay: 0.1s;">
+                        <i class="fas fa-percentage fa-icon-stats mb-3"></i>
+                        <h3 class="fw-bold text-warning mb-2">25%</h3>
+                        <p class="small mb-0" style="opacity: 0.8;">Vaccines Damaged During Transport</p>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card metric-card rounded-4 text-center p-4 h-100 fade-in-up" style="animation-delay: 0.2s;">
+                        <i class="fas fa-eye fa-icon-stats mb-3"></i>
+                        <h3 class="fw-bold text-warning mb-2">100%</h3>
+                        <p class="small mb-0" style="opacity: 0.8;">Transparency with Blockchain</p>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card metric-card rounded-4 text-center p-4 h-100 fade-in-up" style="animation-delay: 0.3s;">
+                        <i class="fas fa-clock fa-icon-stats mb-3"></i>
+                        <h3 class="fw-bold text-warning mb-2">24/7</h3>
+                        <p class="small mb-0" style="opacity: 0.8;">Real-time Monitoring</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="py-5" style="background: linear-gradient(135deg, #fef2f2 0%, #fef3e8 100%);">
+        <div class="container">
+            <div class="text-center mb-5 fade-in-up">
+                <h2 class="display-4 fw-bold text-dark mb-4">The Cold Chain Crisis</h2>
+                <p class="lead text-muted">Billions of dollars worth of vaccines are wasted annually due to temperature breaches and lack of transparency</p>
+            </div>
+            
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-fire fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-dark mb-3">Temperature Breaches</h4>
+                        <p class="text-muted">Vaccines lose potency when exposed to improper temperatures</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-search fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-dark mb-3">Lack of Traceability</h4>
+                        <p class="text-muted">No real-time visibility into vaccine condition and location</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-exclamation-triangle fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-dark mb-3">Manual Monitoring</h4>
+                        <p class="text-muted">Error-prone human processes lead to costly mistakes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section id="features" class="py-5" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);">
+        <div class="container">
+            <div class="text-center mb-5 fade-in-up">
+                <h2 class="display-4 fw-bold text-dark mb-4">How Soltrack Solves This</h2>
+                <p class="lead text-muted">Advanced IoT sensors, blockchain security, and smart contracts working together</p>
+            </div>
+            
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-satellite-dish fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-primary mb-3">IoT Sensor Network</h4>
+                        <p class="text-muted">Real-time temperature, humidity, and location tracking with instant alerts</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-lock fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-primary mb-3">Smart Contract Escrow</h4>
+                        <p class="text-muted">Automated payment release based on delivery conditions</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-cloud fa-icon mb-4"></i>
+                        <h4 class="fw-bold text-primary mb-3">Hybrid Architecture</h4>
+                        <p class="text-muted">AWS cloud integration with Chainlink oracles for maximum reliability</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="py-5 bg-white">
+        <div class="container">
+            <div class="text-center mb-5 fade-in-up">
+                <h2 class="display-4 fw-bold text-dark">Comprehensive Feature Set</h2>
+            </div>
+            
+            <div class="row g-4">
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-thermometer-half fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Real-Time Monitoring</h5>
+                        <p class="text-muted small">Continuous temperature and environmental tracking</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-money-check-alt fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Smart Escrow</h5>
+                        <p class="text-muted small">Conditional payment release system</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-bell fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Instant Alerts</h5>
+                        <p class="text-muted small">Immediate notifications for any breaches</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-link fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Blockchain Records</h5>
+                        <p class="text-muted small">Immutable audit trail for compliance</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-globe fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Global Integration</h5>
+                        <p class="text-muted small">AWS and Chainlink connectivity</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0">
+                        <i class="fas fa-chart-bar fa-icon-large mb-3"></i>
+                        <h5 class="fw-semibold text-dark mb-2">Admin Dashboard</h5>
+                        <p class="text-muted small">Comprehensive management interface</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Target Users -->
+    <section id="about" class="py-5" style="background: linear-gradient(135deg, #faf5ff 0%, #fdf2f8 100%);">
+        <div class="container">
+            <div class="text-center mb-5 fade-in-up">
+                <h2 class="display-4 fw-bold text-dark">Built for Healthcare Leaders</h2>
+            </div>
+            
+            <div class="row g-4 justify-content-center">
+                <div class="col-lg-3 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0 text-center">
+                        <i class="fas fa-industry fa-icon mb-3"></i>
+                        <h5 class="fw-semibold text-dark">Vaccine Manufacturers</h5>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0 text-center">
+                        <i class="fas fa-truck fa-icon mb-3"></i>
+                        <h5 class="fw-semibold text-dark">Medical Distributors</h5>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0 text-center">
+                        <i class="fas fa-landmark fa-icon mb-3"></i>
+                        <h5 class="fw-semibold text-dark">NGOs & Governments</h5>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="card feature-card rounded-4 p-4 h-100 border-0 text-center">
+                        <i class="fas fa-snowflake fa-icon mb-3"></i>
+                        <h5 class="fw-semibold text-dark">Cold Chain Providers</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo CTA Section -->
+    <section class="py-5" style="background: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%);">
+        <div class="container">
+            <div class="text-center fade-in-up">
+                <h2 class="display-4 fw-bold text-white mb-4">Ready to Transform Your Cold Chain?</h2>
+                <p class="lead text-white mb-5" style="opacity: 0.9;">See how Soltrack can secure your vaccine logistics with cutting-edge technology</p>
+                
+                <div class="d-flex gap-3 justify-content-center flex-wrap">
+                    <button class="btn btn-primary-custom btn-lg px-4 py-3 rounded-4" onclick="connectMetaMask()">
+                        <i class="fas fa-link me-2"></i>Connect MetaMask
+                    </button>
+                    <button class="btn btn-glass btn-lg px-4 py-3 rounded-4" onclick="showDashboard()">
+                        <i class="fas fa-mobile-alt me-2"></i>View Demo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-5 bg-dark">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-4">
+                    <h5 class="text-white fw-bold mb-3">
+                        <i class="bi bi-shield-check me-2"></i>Soltrack
+                    </h5>
+                    <p class="text-light opacity-75">Revolutionizing vaccine logistics with IoT and blockchain security.</p>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="text-white fw-semibold mb-3">Quick Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="#home" class="text-light opacity-75 text-decoration-none">Home</a></li>
+                        <li><a href="#features" class="text-light opacity-75 text-decoration-none">Features</a></li>
+                        <li><a href="#about" class="text-light opacity-75 text-decoration-none">About</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="text-white fw-semibold mb-3">Contact</h6>
+                    <p class="text-light opacity-75">info@soltrack.com</p>
+                </div>
+            </div>
+            <hr class="my-4 opacity-25">
+            <div class="text-center">
+                <p class="text-light opacity-75 mb-0">&copy; 2025 Soltrack. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title text-white fw-bold">
+                        <i class="bi bi-person-circle me-2"></i>Login to Soltrack
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label text-white">Username</label>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label text-white">Password</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary-custom w-100 py-2 rounded-3">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MetaMask Connection Modal -->
+    <div class="modal fade" id="metamaskModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0 text-center">
+                    <div class="w-100">
+                        <h4 class="modal-title text-white fw-bold"><i class="fab fa-ethereum me-2"></i>Connect to Web3</h4>
+                        <p class="text-white opacity-75 mb-0">Connect your MetaMask wallet to access Soltrack's blockchain features</p>
+                    </div>
+                </div>
+                <div class="modal-body text-center">
+                    <button class="btn btn-warning btn-lg w-100 py-3 rounded-3 mb-3" onclick="connectWallet()">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" 
+                             alt="MetaMask" style="width: 24px; height: 24px;" class="me-2">
+                        Connect with MetaMask
+                    </button>
+                    <button class="btn btn-primary-custom w-100 py-3 rounded-3" onclick="showDashboard()">
+                        Continue to Dashboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Soltrack - Smarter Vaccine Logistics</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+</head>
+<body>
+    <div class="login-container">
+        <!-- Floating background elements -->
+        <div class="floating-elements">
+            <div class="floating-circle circle-1"></div>
+            <div class="floating-circle circle-2"></div>
+            <div class="floating-circle circle-3"></div>
+        </div>
+        
+        <!-- Login card -->
+        <div class="login-card">
+            <!-- Header section -->
+            <div class="login-header">
+                <h1 class="login-title">Welcome Back</h1>
+                <p class="login-subtitle">Sign in to your Soltrack account</p>
+            </div>
+
+            <!-- Show Django messages (errors, success) -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- Login form -->
+            <form method="post" action="{% url 'login' %}">
+                {% csrf_token %}
+
+                <!-- Username/Email input -->
+                <div class="modern-input">
+                    <label for="id_username" class="form-label">Username or Email</label>
+                    <input type="text" name="username" class="form-control" id="id_username" placeholder="Enter your credentials" required>
+                </div>
+                
+                <!-- Password input -->
+                <div class="modern-input position-relative">
+                    <label for="id_password" class="form-label">Password</label>
+                    <input type="password" name="password" class="form-control" id="id_password" placeholder="Enter your password" required>
+                </div>
+                
+                <!-- Login button -->
+                <button type="submit" class="login-btn">
+                    Sign In
+                </button>
+                
+                <!-- Security badge -->
+                <div class="security-badge">
+                    <i class="bi bi-shield-check"></i>
+                    <span>🔒 Secure Login with Django Auth</span>
+                </div>
+
+                <!-- Demo credentials -->
+                <div class="demo-credentials">
+                    <div class="demo-title">
+                        <i class="bi bi-info-circle"></i>
+                        <span>Demo Credentials</span>
+                    </div>
+                    <div class="mb-1">
+                        <small class="text-muted">Username:</small><br>
+                        <code class="demo-cred">admin_acc</code>
+                    </div>
+                    <div>
+                        <small class="text-muted">Password:</small><br>
+                        <code class="demo-cred">admin_acc1234</code>
+                    </div>
+                </div>
+
+                <!-- Back to home -->
+                <div class="text-center mt-3">
+                    <a href="{% url 'index' %}" class="text-decoration-none" style="color: #6366f1;">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Home
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

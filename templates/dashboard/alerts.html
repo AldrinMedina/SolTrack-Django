@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!-- Alerts Tab -->
+<div id="alerts-content" class="tab-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-white mb-2">Active Alerts</h2>
+            <p class="text-white opacity-75">Temperature breaches and system notifications</p>
+        </div>
+        <button class="btn btn-outline-light" onclick="clearAllAlerts()">
+            <i class="bi bi-check-all me-2"></i>Clear All
+        </button>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-3 fs-4"></i>
+                <div class="flex-grow-1">
+                    <h5 class="alert-heading mb-1">Critical Temperature Breach</h5>
+                    <p class="mb-1">Contract #SC-002 (Moderna vaccines) temperature exceeded threshold</p>
+                    <small class="opacity-75">Current: -8.1°C | Threshold: -8°C | Duration: 15 minutes</small>
+                </div>
+                <div class="ms-3">
+                    <button class="btn btn-outline-danger btn-sm me-2">
+                        <i class="bi bi-bell-slash"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm">
+                        <i class="bi bi-telephone"></i> Call
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="alert alert-warning d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-circle-fill me-3 fs-4"></i>
+                <div class="flex-grow-1">
+                    <h5 class="alert-heading mb-1">Sensor Connectivity Issue</h5>
+                    <p class="mb-1">Sensor #004 lost connection for 2 minutes</p>
+                    <small class="opacity-75">Last reading: -2.5°C at 14:32 | Status: Reconnected</small>
+                </div>
+                <div class="ms-3">
+                    <button class="btn btn-outline-warning btn-sm me-2">
+                        <i class="bi bi-bell-slash"></i>
+                    </button>
+                    <button class="btn btn-warning btn-sm">
+                        <i class="bi bi-tools"></i> Check
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+                <div class="flex-grow-1">
+                    <h5 class="alert-heading mb-1">System Maintenance Scheduled</h5>
+                    <p class="mb-1">Routine maintenance planned for tonight 2:00 AM - 4:00 AM</p>
+                    <small class="opacity-75">All monitoring will continue with backup systems</small>
+                </div>
+                <div class="ms-3">
+                    <button class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-calendar"></i> Schedule
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

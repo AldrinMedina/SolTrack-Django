@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!-- Analytics Tab -->
+<div id="analytics-content" class="tab-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-white mb-2">Analytics & Reports</h2>
+            <p class="text-white opacity-75">Performance insights and trends</p>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-calendar me-2"></i>Last 30 days
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#">Last 7 days</a></li>
+                <li><a class="dropdown-item" href="#">Last 30 days</a></li>
+                <li><a class="dropdown-item" href="#">Last 90 days</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="metric-card text-center">
+                <div class="display-6 text-success fw-bold mb-2">98.5%</div>
+                <h6 class="fw-bold text-dark">Temperature Compliance</h6>
+                <small class="text-muted">+2.1% from last month</small>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="metric-card text-center">
+                <div class="display-6 text-primary fw-bold mb-2">4.2h</div>
+                <h6 class="fw-bold text-dark">Avg Delivery Time</h6>
+                <small class="text-muted">-0.8h from last month</small>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="metric-card text-center">
+                <div class="display-6 text-info fw-bold mb-2">₱2.1M</div>
+                <h6 class="fw-bold text-dark">Total Value Secured</h6>
+                <small class="text-muted">+15% from last month</small>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="metric-card text-center">
+                <div class="display-6 text-warning fw-bold mb-2">99.2%</div>
+                <h6 class="fw-bold text-dark">Sensor Uptime</h6>
+                <small class="text-muted">Excellent performance</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="chart-container">
+                <h5 class="fw-bold text-dark chart-title">Monthly Performance Trends</h5>
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="chart-container">
+                <h5 class="fw-bold text-dark">Vaccine Distribution</h5>
+                <canvas id="distributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js (optional if not yet loaded globally) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const performanceCtx = document.getElementById('performanceChart');
+    const distributionCtx = document.getElementById('distributionChart');
+
+    new Chart(performanceCtx, {
+        type: 'line',
+        data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+                label: 'Temperature Compliance (%)',
+                data: [94, 96, 95, 97, 98, 98.5],
+                borderWidth: 2,
+                borderColor: '#28a745',
+                fill: false,
+                tension: 0.3
+            }]
+        }
+    });
+
+    new Chart(distributionCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pfizer', 'Moderna', 'Sinovac', 'AstraZeneca'],
+            datasets: [{
+                data: [35, 30, 20, 15],
+                backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545']
+            }]
+        }
+    });
+</script>
+{% endblock %}

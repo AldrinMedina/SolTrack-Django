@@ -1,0 +1,194 @@
+
+#title{
+    color: black;
+}
+
+.test{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+body { 
+    font-family: "Inter", sans-serif; 
+    transition: all 0.3s ease-in-out;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    margin: 0;
+    padding: 0;
+}
+
+.hero-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #f093fb 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-gradient::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.feature-card {
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #6366f1, transparent);
+    transition: left 0.5s ease;
+}
+
+.feature-card:hover::before {
+    left: 100%;
+}
+
+.feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.2);
+    border-color: #6366f1;
+}
+
+.pulse-dot {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.floating-animation {
+    animation: floating 3s ease-in-out infinite;
+}
+
+@keyframes floating {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+.fade-in-up {
+    opacity: 0;
+    transform: translateY(30px);
+    animation: fadeInUp 0.8s ease forwards;
+}
+
+.fade-in-left {
+    opacity: 0;
+    transform: translateX(-30px);
+    animation: fadeInLeft 0.8s ease forwards;
+}
+
+.fade-in-right {
+    opacity: 0;
+    transform: translateX(30px);
+    animation: fadeInRight 0.8s ease forwards;
+}
+
+@keyframes fadeInUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInLeft {
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeInRight {
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.btn-primary-custom {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border: none;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    color: white;
+}
+
+.btn-primary-custom::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s ease;
+}
+
+.btn-primary-custom:hover::before {
+    left: 100%;
+}
+
+.btn-primary-custom:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
+    color: white;
+}
+
+.section-spacing {
+    animation-delay: 0.2s;
+}
+
+.metric-card {
+    background: linear-gradient(145deg, #1e293b, #334155);
+    color: white;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.navbar-custom {
+    backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-glass {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    transition: all 0.3s ease;
+}
+
+.btn-glass:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.fa-icon {
+    font-size: 3rem;
+    color: #6366f1;
+}
+
+.fa-icon-large {
+    font-size: 2.5rem;
+    color: #6366f1;
+}
+
+.fa-icon-stats {
+    font-size: 3rem;
+    color: #f59e0b;
+}

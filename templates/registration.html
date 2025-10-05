@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolTrack - User Registration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #1e40af;
+            --accent: #f59e0b;
+            --error: #ef4444;
+            --gray: #6b7280;
+            --light-gray: #f3f4f6;
+            --dark: #111827;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            background: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .card {
+            background: #fff;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo span {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            text-align: center;
+            font-size: 1.75rem;
+            margin-bottom: 2rem;
+            color: var(--dark);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--light-gray);
+            color: var(--dark);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--gray);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .upload-box {
+            border: 2px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--gray);
+            transition: all 0.3s;
+        }
+
+        .upload-box:hover {
+            border-color: var(--primary);
+            background: #f9fafc;
+        }
+
+        .checkbox-group {
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-group label {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .checkbox-group a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .checkbox-group a:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo"><span>SolTrack</span></div>
+        <h2>User Registration</h2>
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <!-- Show form-wide errors -->
+            {% if form.non_field_errors %}
+                <div class="errorlist">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <!-- Basic Info -->
+            <div class="section-title">Basic Information</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_first_name">First Name *</label>
+                    {{ form.first_name }}
+                    {{ form.first_name.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_middle_name">Middle Name</label>
+                    {{ form.middle_name }}
+                    {{ form.middle_name.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_last_name">Last Name *</label>
+                    {{ form.last_name }}
+                    {{ form.last_name.errors }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_email">Email *</label>
+                    {{ form.email }}
+                    {{ form.email.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_phone">Phone *</label>
+                    {{ form.phone }}
+                    {{ form.phone.errors }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_organization">Organization</label>
+                    {{ form.organization }}
+                    {{ form.organization.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_user_role">User Role *</label>
+                    {{ form.user_role }}
+                    {{ form.user_role.errors }}
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="section-title">Security</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_username">Username *</label>
+                    {{ form.username }}
+                    {{ form.username.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_wallet_address">Wallet Address (Optional)</label>
+                    {{ form.wallet_address }}
+                    {{ form.wallet_address.errors }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_password">Password *</label>
+                    {{ form.password }}
+                    {{ form.password.errors }}
+                </div>
+                <div class="form-group">
+                    <label for="id_confirm_password">Confirm Password *</label>
+                    {{ form.confirm_password }}
+                    {{ form.confirm_password.errors }}
+                </div>
+            </div>
+
+            <!-- Verification -->
+            <div class="section-title">Verification (Optional)</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_id_upload">Government ID / License</label>
+                    <div class="upload-box">
+                        {{ form.id_upload }}
+                        {{ form.id_upload.errors }}
+                        <p>Upload PDF, PNG, JPG (max 10MB)</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="id_address_upload">Proof of Address</label>
+                    <div class="upload-box">
+                        {{ form.address_upload }}
+                        {{ form.address_upload.errors }}
+                        <p>Upload PDF, PNG, JPG (max 10MB)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agreement -->
+            <div class="section-title">Agreement</div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" required> I agree to the <a href="#">Terms & Conditions</a></label>
+            </div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" required> I agree to the <a href="#">Privacy Policy</a></label>
+            </div>
+
+            <!-- Submit -->
+            <button type="submit" class="btn">Create Account</button>
+        </form>
+    </div>
+</body>
+</html>

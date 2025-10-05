@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!-- Ongoing Shipments Tab -->
+<div id="ongoing-content" class="tab-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-white mb-2">Ongoing Shipments</h2>
+            <p class="text-white opacity-75">In-transit vaccine deliveries</p>
+        </div>
+    </div>
+
+    <div class="card-modern p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="border-0 fw-semibold">Shipment ID</th>
+                        <th class="border-0 fw-semibold">Vaccine Type</th>
+                        <th class="border-0 fw-semibold">Current Location</th>
+                        <th class="border-0 fw-semibold">Temperature</th>
+                        <th class="border-0 fw-semibold">Status</th>
+                        <th class="border-0 fw-semibold">ETA</th>
+                        <th class="border-0 fw-semibold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="fw-medium">#SH-001</td>
+                        <td>Pfizer-BioNTech</td>
+                        <td>Manila → Cebu</td>
+                        <td><span class="badge status-normal">-1.5°C</span></td>
+                        <td><span class="badge bg-success">Normal</span></td>
+                        <td>2h 30m</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SH-002</td>
+                        <td>Moderna</td>
+                        <td>Cebu → Davao</td>
+                        <td><span class="badge status-warning">-7.8°C</span></td>
+                        <td><span class="badge bg-warning">Alert</span></td>
+                        <td>5h 15m</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SH-003</td>
+                        <td>J&J</td>
+                        <td>Davao → Cagayan</td>
+                        <td><span class="badge status-normal">-2.1°C</span></td>
+                        <td><span class="badge bg-success">Normal</span></td>
+                        <td>8h 45m</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SH-004</td>
+                        <td>AstraZeneca</td>
+                        <td>Manila → Baguio</td>
+                        <td><span class="badge status-normal">-1.8°C</span></td>
+                        <td><span class="badge bg-success">Normal</span></td>
+                        <td>3h 20m</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SH-005</td>
+                        <td>Sinovac</td>
+                        <td>Cebu → Iloilo</td>
+                        <td><span class="badge status-normal">-2.5°C</span></td>
+                        <td><span class="badge bg-success">Normal</span></td>
+                        <td>4h 10m</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

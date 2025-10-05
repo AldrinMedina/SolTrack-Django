@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!-- Completed Contracts Tab -->
+<div id="completed-content" class="tab-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-white mb-2">Completed Contracts</h2>
+            <p class="text-white opacity-75">Successfully delivered shipments</p>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="metric-card text-center">
+                <div class="display-6 text-success fw-bold mb-2">12</div>
+                <h6 class="fw-bold text-dark">Total Completed</h6>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card text-center">
+                <div class="display-6 text-primary fw-bold mb-2">11</div>
+                <h6 class="fw-bold text-dark">Successful</h6>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card text-center">
+                <div class="display-6 text-warning fw-bold mb-2">1</div>
+                <h6 class="fw-bold text-dark">With Issues</h6>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card text-center">
+                <div class="display-6 text-info fw-bold mb-2">91.7%</div>
+                <h6 class="fw-bold text-dark">Success Rate</h6>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-modern p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="border-0 fw-semibold">Contract ID</th>
+                        <th class="border-0 fw-semibold">Vaccine Type</th>
+                        <th class="border-0 fw-semibold">Route</th>
+                        <th class="border-0 fw-semibold">Delivery Status</th>
+                        <th class="border-0 fw-semibold">Completion Date</th>
+                        <th class="border-0 fw-semibold">Report</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="fw-medium">#SC-010</td>
+                        <td>Pfizer-BioNTech</td>
+                        <td>Manila → Cebu</td>
+                        <td><span class="badge bg-success">Successful</span></td>
+                        <td>Sep 16, 2025</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SC-007</td>
+                        <td>AstraZeneca</td>
+                        <td>Davao → Cagayan</td>
+                        <td><span class="badge bg-success">Successful</span></td>
+                        <td>Sep 15, 2025</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">#SC-006</td>
+                        <td>Sinovac</td>
+                        <td>Manila → Iloilo</td>
+                        <td><span class="badge bg-success">Successful</span></td>
+                        <td>Sep 14, 2025</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
