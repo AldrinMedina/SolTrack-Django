@@ -27,9 +27,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['soltrack-django.onrender.com', 'localhost', '127.0.0.1']
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # <- for deployment
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]  # <- your development static folder
 
 # Application definition
 
