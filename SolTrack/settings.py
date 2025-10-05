@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-m-if4jyg^gmr1c8a3x3q)2h!xb1_swj930wc&dlmbkk#h^ai)-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['soltrack-django.onrender.com', 'localhost', '127.0.0.1']
 
 STATICFILES_DIRS = [
     BASE_DIR / "static",
