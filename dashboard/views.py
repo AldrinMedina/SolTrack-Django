@@ -139,7 +139,8 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     MAX_INT_VALUE = 2147483647
     buyer_id_int = abs(hash(BuyerAddress)) % MAX_INT_VALUE
     seller_id_int = abs(hash(SellerAddress)) % MAX_INT_VALUE
-    next_contract_id = Contract.objects.latest('contract_id').contract_id + 1 if Contract.objects.exists() else 1000
+    latest_iot_contract = iot_devices.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
+    next_contract_id = (latest_iot_contract or 0) + 1
     print(f"10. Saving contract details to database (Attempting ID: {next_contract_id}).")
     
     new_contract = Contract.objects.create(
