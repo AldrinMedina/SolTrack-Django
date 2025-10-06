@@ -1,55 +1,47 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
-from django.contrib.auth.models import User
 from django.contrib import messages
 from .forms import RegistrationForm
-from .models import UserProfile
+from .models import CustomUser
 
-# Create your views here.
+# Landing page
 def index(request):
     return render(request, 'index.html')
 
+
+# Login view
 def login_view(request):
     if request.method == "POST":
-        username = request.POST.get("username")
+        email = request.POST.get("email")
         password = request.POST.get("password")
 
-        user = authenticate(request, username=username, password=password)
-
+        user = authenticate(request, email=email, password=password)
         if user is not None:
             login(request, user)
             messages.success(request, "✅ Login successful. Welcome back!")
-            return redirect("dashboard")  # or wherever
+            return redirect("dashboard")
         else:
-            messages.error(request, "❌ Invalid username or password.")
+            messages.error(request, "❌ Invalid email or password.")
 
     return render(request, "login.html")
 
+
+
+# Registration view
 def register_view(request):
     if request.method == "POST":
-        form = RegistrationForm(request.POST, request.FILES)
+        form = RegistrationForm(request.POST)
         if form.is_valid():
-            user = User.objects.create_user(
-                username=form.cleaned_data["username"],
-                first_name=form.cleaned_data["first_name"],
-                last_name=form.cleaned_data["last_name"],
+            user = CustomUser.objects.create_user(
                 email=form.cleaned_data["email"],
-                password=form.cleaned_data["password"]
-            )
-            profile = UserProfile.objects.create(
-                user=user,
-                middle_name=form.cleaned_data.get("middle_name"),
-                phone=form.cleaned_data["phone"],
+                full_name=form.cleaned_data["full_name"],
+                password=form.cleaned_data["password"],
+                role=form.cleaned_data.get("role", "buyer"),
                 organization=form.cleaned_data.get("organization"),
-                user_role=form.cleaned_data["user_role"],
-                wallet_address=form.cleaned_data.get("wallet_address"),
-                id_upload=form.cleaned_data.get("id_upload"),
-                address_upload=form.cleaned_data.get("address_upload"),
             )
-
             messages.success(request, "🎉 Account created successfully! Please log in.")
-            login(request, user)  # auto-login after registration
-            return redirect("dashboard")  # or wherever
+            login(request, user)
+            return redirect("dashboard")
         else:
             messages.error(request, "⚠️ Please fix the errors below.")
     else:
