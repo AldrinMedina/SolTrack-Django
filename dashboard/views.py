@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
-
+from django.contrib import messages
 from django.utils import timezone 
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -32,6 +32,8 @@ from eth_account import Account # NEW
 from accounts.models import CustomUser
 from web3.exceptions import ContractLogicError
 load_dotenv() 
+from Adafruit_IO import Client 
+from Adafruit_IO import RequestError
 
 
 
@@ -71,15 +73,51 @@ web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 # Get the deployer account address from the private key
 deployer_account = Account.from_key(DEPLOYER_PRIVATE_KEY)
 DEPLOYER_ADDRESS = deployer_account.address # The address used for transactions
+TEMP_FEED = 'text-feed'
+TEMP_THRESHOLD = 20.0 	# Example threshold value (°C) - Kept from alpha.py for consistency
+THRESHOLD_DURATION = 300 	# 5 minutes in seconds (5 * 60)
+
+
+ADAFRUIT_IO_USERNAME = ''
+ADAFRUIT_IO_KEY = ''
+
+aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
+def _get_live_iot_data():
+  
+    if aio is None:
+        print("AIO Client not initialized. Returning mock data.")
+        # Fallback/Mock data if AIO setup failed
+        return -100.0, "N/A", "bg-secondary" 
+
+    try:
+        # Fetch the latest value from the temperature feed
+        temp_str = aio.receive(TEMP_FEED).value
+        temperature = float(temp_str)
+        temperature_str = f"{temperature:.1f}°C"
+
+        if temperature > TEMP_THRESHOLD:
+            status_class = "status-warning" # A custom class, maybe 'bg-warning' in Bootstrap
+        else:
+            status_class = "status-normal"
+            
+        return temperature, temperature_str, status_class
+        
+    except RequestError as e:
+        print(f"Error fetching Temperature feed from Adafruit IO: {e}")
+    except ValueError:
+        print("Invalid temperature value received from feed.")
+    except Exception as e:
+        print(f"An unexpected error occurred during IoT data fetch: {e}")
+    
+    # Return default/error values
+    return -100.0, "N/A", "bg-secondary"
 
 
 def _get_current_temp(threshold_float):
     """Mocks a live temperature reading based on the threshold."""
     current_temp_mock = IoTData.objects.latest('recorded_at').temperature
     return f"{current_temp_mock:.1f}°C", current_temp_mock
-
-
-# --- CONTRACT DEPLOYMENT LOGIC (NOW USES CHAR(42) ADDRESSES) ---
 
 def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity):
     """
@@ -893,6 +931,7 @@ def product_delete_view(request, pk):
     
     
 @login_required(login_url='login')
+@login_required(login_url='login')
 def ongoing_view(request):
     user = request.user
     user_role = request.session.get("user_role", "").lower()
@@ -905,19 +944,26 @@ def ongoing_view(request):
     else:  # admin
         contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
 
+    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
+    live_temp_float, live_temp_str, _ = _get_live_iot_data()
+
     # 🌡️ Prepare ongoing shipment data
     ongoing_data = []
     for contract in contracts:
-        latest_temp = (
-            IoTData.objects.filter(device_id=1).latest('recorded_at').temperature
-        )
+        # FIX 2: Use the live_temp_str instead of the DB query
+        
+        # Determine temperature display (use "N/A" if the fetch failed)
+        current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
+
 
         ongoing_data.append({
             "contract_id": contract.contract_id,
             "product_name": contract.product_name,
-            "temperature": latest_temp,
+            # Use the live temperature string
+            "temperature": current_temp_display, 
             "status": contract.status,
-            "threshold": contract.max_temp,
+            "min_temp": contract.min_temp,
+            "max_temp": contract.max_temp,
             "buyer_name": contract.buyer.full_name if contract.buyer else "—",
             "seller_name": contract.seller.full_name if contract.seller else "—",
         })
@@ -929,7 +975,44 @@ def ongoing_view(request):
 
     return render(request, "dashboard/ongoing.html", context)
 
-# In views.py
+
+@login_required(login_url='login')
+def ongoing_data_json(request):
+    user = request.user
+    user_role = user.role.lower()
+
+    # 1. Filter contracts based on role (already correct)
+    if user_role == "buyer":
+        contracts = Contract.objects.filter(buyer=user, status__in=["Ongoing", "In Transit"])
+    elif user_role == "seller":
+        contracts = Contract.objects.filter(seller=user, status__in=["Ongoing", "In Transit"])
+    else:  # admin
+        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+
+    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
+    live_temp_float, live_temp_str, _ = _get_live_iot_data()
+    
+    # 2. Determine temperature display (use "N/A" if the fetch failed)
+    temperature_display = live_temp_str if live_temp_float != -100.0 else "N/A"
+        
+
+    # 3. Build the JSON response data
+    ongoing_data_list = []
+    
+    for contract in contracts:
+        ongoing_data_list.append({
+            "contract_id": contract.contract_id,
+            "product_name": contract.product_name,
+            # CRITICAL FIX: Use the live temperature string from Adafruit IO
+            "temperature": temperature_display, 
+            "status": contract.status,
+            "min_temp": contract.min_temp,
+            "max_temp": contract.max_temp,
+            "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else "—",
+            "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else "—",
+        })
+
+    return JsonResponse({"ongoing_data": ongoing_data_list})
 
 @login_required(login_url='login')
 def completed_view(request):

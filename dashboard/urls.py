@@ -8,15 +8,22 @@ urlpatterns = [
     path('active/', views.active_view, name='active'),
     path('contract/create/', views.create_contract_view, name='create_contract'),
     path('contract/<int:contract_id>/action/', views.process_contract_action, name='process_contract_action'),
+    
     path('ongoing/', views.ongoing_view, name='ongoing'),
+    path('ongoing/data/', views.ongoing_data_json, name='ongoing_data_json'),
+    
     path('completed/', views.completed_view, name='completed'),
     path('completed/<int:contract_id>/', views.download_contract_report, name='download_contract_report'),
     path('alerts/', views.alerts_view, name='alerts'),
     path('analytics/', views.analytics_view, name='analytics'),
 
+
     path("products/", views.product_manager_view, name="product_manager"),
     path("products/add/", views.product_create_view, name="product_add"),
     path("products/edit/<int:pk>/", views.product_edit_view, name="product_edit"),
     path("products/delete/<int:pk>/", views.product_delete_view, name="product_delete"),
+
+    
+
 ]
 
