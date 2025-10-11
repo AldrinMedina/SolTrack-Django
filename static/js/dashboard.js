@@ -240,8 +240,75 @@ function updateDashboard() {
         .catch(err => console.error("Dashboard update failed:", err));
 }
 
+function updateOngoingShipments() {
+    // 1. Fetch data from the new JSON endpoint
+    fetch('/ongoing/data/')// Using the correct URL from urls.py
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const ongoingData = data.ongoing_data;
+        const tableBody = document.querySelector('#ongoing-content table tbody');
 
+        // --- CRITICAL FIX 1: CLEAR THE TABLE BODY ---
+        tableBody.innerHTML = ''; 
+            // A more efficient way: update only the relevant cells if the row exists.
+            // However, since your template does a full re-render, we'll fix 
+            // the rendering logic to correctly match the HTML structure.
+            
+            tableBody.innerHTML = ''; // Clear existing rows
 
+            if (ongoingData.length === 0) {
+                // Display the 'No shipments found' message
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-3">
+                            No ongoing shipments found.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+        // 3. Re-render the rows with fresh data
+        ongoingData.forEach(shipment => {
+        const statusClass = shipment.status === "In Transit" ? 'bg-info text-dark' : 'bg-success';
+        // --- CRITICAL FIX 2: Add a check for temperature ---
+        const displayTemperature = shipment.temperature || 'N/A';
+    
+        const newRow = `
+            <tr>
+                <td class="fw-medium">#${shipment.contract_id}</td>
+                <td>${shipment.product_name}</td>
+                <td>${displayTemperature}</td> 
+                <td>
+                    <span class="badge ${statusClass}">${shipment.status}</span>
+                </td>
+                <td>${shipment.buyer_name || '—'}</td>  <td>${shipment.seller_name || '—'}</td> <td>
+                    <button class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+        tableBody.insertAdjacentHTML('beforeend', newRow);
+        });
+    })
+    .catch(error => {
+        console.error('Error fetching ongoing shipment data:', error);
+    });
+}
+
+if (window.location.pathname.includes('ongoing')) {
+    // Run the update function immediately on page load
+    updateOngoingShipments(); 
+
+    // Set the interval to run the update function every 60 seconds (60000 milliseconds)
+    setInterval(updateOngoingShipments, 10000); 
+}
 
 // Auto-refresh alerts section every minute
 setInterval(() => {
