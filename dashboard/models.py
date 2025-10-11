@@ -22,7 +22,8 @@ class Contract(models.Model):
     
     # NEW FIELD: Uses Django's JSONField, which maps to PostgreSQL's JSONB type
     contract_abi = models.JSONField(default=dict) 
-    temperature_threshold = models.FloatField(default=8)
+    min_temp = models.FloatField(default=2) # Or another suitable default
+	max_temp = models.FloatField(default=8) 
     
     # Matches DB: VARCHAR(50). Default should match your DB if possible, but 'active' works for filtering.
     status = models.CharField(max_length=50,  choices=[
