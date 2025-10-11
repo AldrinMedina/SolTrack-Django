@@ -23,11 +23,15 @@
                 <i class="bi bi-exclamation-triangle me-2"></i>Alerts
                 <span class="badge bg-danger ms-auto" id="alertsBadge">0</span>
             </a>
-            <!-- <a href="{% url 'analytics' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-graph-up me-2"></i>Analytics
-            </a> -->
+
+            {% if user.role|lower == "seller" %}
+            <a href="{% url 'product_manager' %}" class="nav-link nav-link-custom mt-2">
+                <i class="bi bi-box-seam me-2"></i>Product Manager
+            </a>
+            {% endif %}
         </nav>
     </div>
+
     <div class="p-4 mt-auto">
         <div class="glass-card p-3 text-center">
             <div class="d-flex align-items-center justify-content-center mb-2">
@@ -40,8 +44,8 @@
 
     <div class="p-4">
         <a href="{% url 'logout' %}" 
-            class="btn btn-outline-light w-100 fw-semibold"
-            onclick="return confirm('Are you sure you want to log out?');">
+           class="btn btn-outline-light w-100 fw-semibold"
+           onclick="return confirm('Are you sure you want to log out?');">
             <i class="bi bi-box-arrow-right me-2"></i> Logout
         </a>
     </div>

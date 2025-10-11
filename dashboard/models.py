@@ -22,7 +22,8 @@ class Contract(models.Model):
     
     # NEW FIELD: Uses Django's JSONField, which maps to PostgreSQL's JSONB type
     contract_abi = models.JSONField(default=dict) 
-    temperature_threshold = models.FloatField(default=8)
+    min_temp = models.FloatField(default=8)
+    max_temp = models.FloatField(default=25)
     
     # Matches DB: VARCHAR(50). Default should match your DB if possible, but 'active' works for filtering.
     status = models.CharField(max_length=50,  choices=[
@@ -110,4 +111,18 @@ class IoTData(models.Model):
     def __str__(self):
         return f"IoT Data #{self.data_id} - Device {self.device.device_id}"
 
-    
+class Product(models.Model):
+    product_id = models.AutoField(primary_key=True)
+    seller = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="products")
+    product_name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    price_eth = models.DecimalField(max_digits=18, decimal_places=8, default=0)
+    quantity_available = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'products'
+        managed = False  # Prevent Django from managing this table
+    def __str__(self):
+        return f"{self.product_name} ({self.seller.full_name})"
