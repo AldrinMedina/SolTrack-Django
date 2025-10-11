@@ -35,7 +35,7 @@ load_dotenv()
 from Adafruit_IO import Client 
 from Adafruit_IO import RequestError
 
-
+import math
 
 SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL")
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
@@ -82,6 +82,74 @@ ADAFRUIT_IO_USERNAME = ''
 ADAFRUIT_IO_KEY = ''
 
 aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
+DELIVERY_THRESHOLD_KM = 0.010 # Distance threshold to mark destination reached
+DELIVERY_COOLDOWN_SECONDS = 180 # 3 minutes (3 * 60)
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Calculates the distance between two points on Earth in kilometers."""
+    R = 6371.0 # Radius of Earth in kilometers
+    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def _check_delivery_status(contract_db):
+    """Checks GPS progress and updates contract status if delivered."""
+    if contract_db.status not in ['Ongoing', 'In Transit']:
+        return 0.0, contract_db.status
+    
+    # 1. Parse Coords (Check for missing data)
+    try:
+        s_lat, s_lon = map(float, contract_db.start_coords.split(','))
+        e_lat, e_lon = map(float, contract_db.end_coords.split(','))
+    except (AttributeError, ValueError):
+        return 0.0, "Coords Missing"
+        
+    # 2. Get Latest GPS Data
+    try:
+        # Assuming the contract is linked to one device (Device ID 1 is a common placeholder)
+        latest_data = IoTData.objects.filter(device_id=1).latest('recorded_at')
+        current_lat = latest_data.gps_lat
+        current_lon = latest_data.gps_long
+        
+        if current_lat is None or current_lon is None:
+             return 0.0, "Tracking N/A"
+        
+    except IoTData.DoesNotExist:
+        return 0.0, "No GPS Data"
+        
+    # 3. Calculate Progress
+    total_route_distance_km = haversine(s_lat, s_lon, e_lat, e_lon)
+    remaining_distance_km = haversine(current_lat, current_lon, e_lat, e_lon)
+    distance_covered_km = haversine(s_lat, s_lon, current_lat, current_lon)
+
+    if total_route_distance_km <= 0.01:
+        progress_percent = 100.0
+    else:
+        progress_ratio = min(distance_covered_km / total_route_distance_km, 1.0)
+        progress_percent = progress_ratio * 100
+    
+    # 4. Check for Delivery Completion (100% and 3 minutes elapsed)
+    if remaining_distance_km < DELIVERY_THRESHOLD_KM:
+        # Check if 3 minutes have passed since the contract was activated
+        if (timezone.now() - contract_db.start_date).total_seconds() >= DELIVERY_COOLDOWN_SECONDS:
+            
+            # Update status to Delivered
+            if contract_db.status != 'Completed':
+                contract_db.status = 'Completed'
+                contract_db.end_date = timezone.now()
+                contract_db.save()
+                print(f"Contract {contract_db.contract_id}: Completed!") # Required console print
+            
+            return 100.0, "Completed"
+
+    # Return progress percentage and status string
+    return progress_percent, f"{progress_percent:.0f}%"
+
 
 def _get_live_iot_data():
   
