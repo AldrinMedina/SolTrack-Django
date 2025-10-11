@@ -251,7 +251,7 @@ def dashboard_data(request):
     user = request.user
     user_role = user.role
 
-    # 🧠 Filter based on role
+    # Filter contracts based on user role
     if user_role.lower() == "buyer":
         contracts = Contract.objects.filter(buyer=user)
     elif user_role.lower() == "seller":
@@ -261,25 +261,31 @@ def dashboard_data(request):
 
     # Contract stats
     total_contracts = contracts.count()
-    active_contracts = contracts.filter(status__in=["Active"]).count()
+    active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
     ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
     completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
 
-    # 🌡️ Temperature stats
-    iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
-    avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
+    # 🌡️ IoT Data (real-time readings)
+    devices = IoTDevice.objects.filter(contract__in=contracts)
+    iot_data = IoTData.objects.filter(device__in=devices)
 
+    avg_temp = iot_data.aggregate(avg=Avg("temperature"))["avg"] or 0
     total_records = iot_data.count()
-    normal_records = iot_data.filter(result="Normal").count()
+
+    # Optional: define “Normal” temperature range (e.g., 2°C to 8°C)
+    normal_records = iot_data.filter(temperature__range=(2, 8)).count()
     success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
 
     # 🚨 Alerts
-    active_alerts = Alert.objects.filter(device__contract__in=contracts, status="Active").count()
+    active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
+    system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
+    status_color = "bg-success" if active_alerts == 0 else "bg-danger"
+
 
     # 📈 Chart data (latest 10 readings)
     temp_history = (
         iot_data.order_by("-recorded_at")[:10]
-        .values_list("recorded_at", "avg_temp")
+        .values_list("recorded_at", "temperature")
     )
     chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
     chart_values = [t[1] for t in reversed(temp_history)]
@@ -287,19 +293,23 @@ def dashboard_data(request):
     return JsonResponse({
         "total_contracts": total_contracts,
         "active_contracts": active_contracts,
+        "ongoing_contracts": ongoing_contracts,
         "completed_contracts": completed_contracts,
         "avg_temp": round(avg_temp, 2),
         "success_rate": success_rate,
         "active_alerts": active_alerts,
         "chart_labels": chart_labels,
         "chart_values": chart_values,
+        "system_status": system_status,
+        "status_color": status_color,
     })
+
 
 def active_view(request):
     
     # --- Live Data Fetch from Supabase via Django ORM ---
     try:
-        contracts_queryset = Contract.objects.filter(status='Active').all()
+        contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit']).all()
     except Exception as e:
         print(f"Database query error: {e}")
         contracts_queryset = []

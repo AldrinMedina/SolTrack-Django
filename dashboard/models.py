@@ -28,7 +28,9 @@ class Contract(models.Model):
     status = models.CharField(max_length=50,  choices=[
         ('Active', 'Active'),
         ('Completed', 'Completed'),
-        ('Pending', 'Pending')
+        ('Pending', 'Pending'),
+        ('Ongoing', 'Ongoing'),
+        ('Refunded', 'Refunded'),
     ], default='Pending') 
 
     buyer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='buyer_contracts', null=True, blank=True)

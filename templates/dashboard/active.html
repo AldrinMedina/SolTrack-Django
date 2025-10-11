@@ -1,6 +1,7 @@
+{% extends 'base.html' %}
 {% load static %}
-{% include "includes/header.html" %}
 
+{% block content %}
 <div id="active-content" class="tab-content">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -60,15 +61,15 @@
                         
                     </div>
 
-                    <div class="progress mb-3" style="height: 8px;">
+                    <!-- <div class="progress mb-3" style="height: 8px;">
                         <div class="progress-bar bg-{{ status_class }}" style="width: {{ item.progress_percent|default_if_none:0 }}%;"></div>
 
-                    </div>
+                    </div> -->
                    
 
                     <div class="d-flex gap-2 mt-4">
     
-    <form method="post" action="{% url 'process_contract_action' contract_id=contract.contract_id %}" class="w-50">
+    <!-- <form method="post" action="{% url 'process_contract_action' contract_id=contract.contract_id %}" class="w-50">
         {% csrf_token %}
         <input type="hidden" name="action" value="complete">
         <button type="submit" class="btn btn-success fw-semibold btn-sm w-100" 
@@ -84,7 +85,7 @@
                 onclick="return confirm('Confirm refund to the Buyer? This cannot be undone.')">
             Refund
         </button>
-    </form>
+    </form> -->
 
 </div>
 
@@ -157,4 +158,4 @@
 </div>
 
 
-{% include "includes/footer.html" %}
+{% endblock %}

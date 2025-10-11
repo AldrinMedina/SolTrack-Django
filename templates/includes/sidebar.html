@@ -37,4 +37,12 @@
             <small class="text-white opacity-75" id="systemStatus">All sensors online</small>
         </div>
     </div>
+
+    <div class="p-4">
+        <a href="{% url 'logout' %}" 
+            class="btn btn-outline-light w-100 fw-semibold"
+            onclick="return confirm('Are you sure you want to log out?');">
+            <i class="bi bi-box-arrow-right me-2"></i> Logout
+        </a>
+    </div>
 </div>

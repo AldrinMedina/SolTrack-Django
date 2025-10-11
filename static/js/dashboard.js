@@ -27,30 +27,25 @@ function updateTimestamp() {
 setInterval(updateTimestamp, 30000); // Update every 30 seconds
 
 // Real-time temperature chart
-const ctx = document.getElementById('temperatureChart')?.getContext('2d');
-if (ctx) {
-    const temperatureChart = new Chart(ctx, {
+const chartElement = document.getElementById('chartData');
+const chartCanvas = document.getElementById('temperatureChart');
+
+if (chartElement && chartCanvas) {
+    const labels = JSON.parse(chartElement.dataset.labels);
+    const values = JSON.parse(chartElement.dataset.values);
+
+    const ctx = chartCanvas.getContext('2d');
+    window.temperatureChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: ['12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
+            labels: labels,
             datasets: [{
-                label: 'Sensor #001',
-                data: [-1.2, -1.1, -1.3, -1.0, -1.2, -1.4, -1.2],
-                borderColor: '#22c55e',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                tension: 0.4
-            }, {
-                label: 'Sensor #002',
-                data: [-8.1, -7.9, -8.2, -8.0, -8.1, -8.3, -8.1],
-                borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                tension: 0.4
-            }, {
-                label: 'Sensor #003',
-                data: [-2.8, -2.7, -2.9, -2.6, -2.8, -3.0, -2.8],
-                borderColor: '#6366f1',
-                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                tension: 0.4
+                label: 'Temperature (°C)',
+                data: values,
+                borderColor: '#0d6efd',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3
             }]
         },
         options: {
@@ -64,6 +59,8 @@ if (ctx) {
             scales: {
                 y: {
                     beginAtZero: false,
+                    suggestedMin: -10,
+                    suggestedMax: 10,
                     title: {
                         display: true,
                         text: 'Temperature (°C)'
@@ -78,33 +75,8 @@ if (ctx) {
             }
         }
     });
-
-    // Simulate real-time updates
-    setInterval(() => {
-        const datasets = temperatureChart.data.datasets;
-        datasets.forEach(dataset => {
-            // Add new random temperature reading
-            const lastValue = dataset.data[dataset.data.length - 1];
-            const newValue = lastValue + (Math.random() - 0.5) * 0.5;
-            dataset.data.push(newValue);
-            
-            // Keep only last 10 data points
-            if (dataset.data.length > 10) {
-                dataset.data.shift();
-            }
-        });
-        
-        // Update labels
-        const now = new Date();
-        const timeLabel = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        temperatureChart.data.labels.push(timeLabel);
-        if (temperatureChart.data.labels.length > 10) {
-            temperatureChart.data.labels.shift();
-        }
-        
-        temperatureChart.update('none');
-    }, 5000); // Update every 5 seconds
 }
+
 
 // Performance chart
 const performanceCtx = document.getElementById('performanceChart')?.getContext('2d');
@@ -165,32 +137,7 @@ if (distributionCtx) {
     });
 }
 
-// Simulate real-time temperature updates
-// function updateSensorReadings() {
-//     const sensors = document.querySelectorAll('[data-sensor]');
-//     sensors.forEach(sensor => {
-//         const currentTemp = parseFloat(sensor.textContent);
-//         const variation = (Math.random() - 0.5) * 0.3;
-//         const newTemp = (currentTemp + variation).toFixed(1);
-//         sensor.textContent = newTemp + '°C';
-        
-//         // Update status based on temperature
-//         const statusBadge = sensor.parentNode.querySelector('.badge');
-//         if (parseFloat(newTemp) < -8 || parseFloat(newTemp) > 2) {
-//             statusBadge.className = 'badge status-critical';
-//             statusBadge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Critical';
-//         } else if (parseFloat(newTemp) < -6 || parseFloat(newTemp) > 0) {
-//             statusBadge.className = 'badge status-warning';
-//             statusBadge.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>Warning';
-//         } else {
-//             statusBadge.className = 'badge status-normal';
-//             statusBadge.innerHTML = '<i class="bi bi-check-circle me-1"></i>Normal';
-//         }
-//     });
-// }
 
-// Update sensor readings every 10 seconds
-setInterval(updateSensorReadings, 10000);
 
 // Clear all alerts function
 function clearAllAlerts() {
@@ -249,7 +196,7 @@ document.addEventListener('click', function(e) {
 // =====================
 
 function updateDashboard() {
-    fetch("/dashboard/data/")  // <-- make sure this matches your Django URL name or pattern
+    fetch(DASHBOARD_DATA_URL)  // <-- make sure this matches your Django URL name or pattern
         .then(response => response.json())
         .then(data => {
             // --- Overview Metrics ---
@@ -283,14 +230,18 @@ function updateDashboard() {
 
             // --- Temperature Chart ---
             const chartCanvas = document.getElementById("temperatureChart");
-            if (chartCanvas && window.temperatureChart) {
+            if (window.temperatureChart && data.chart_labels && data.chart_values) {
                 window.temperatureChart.data.labels = data.chart_labels;
                 window.temperatureChart.data.datasets[0].data = data.chart_values;
-                window.temperatureChart.update();
+                window.temperatureChart.update("none");
             }
+
         })
         .catch(err => console.error("Dashboard update failed:", err));
 }
+
+
+
 
 // Auto-refresh alerts section every minute
 setInterval(() => {
@@ -306,5 +257,10 @@ setInterval(() => {
 }, 60000);
 
 
-// Auto-refresh every 30 seconds
-setInterval(updateDashboard, 30000);
+// Auto-refresh only if dashboard-related pages are active
+if (window.location.pathname.includes("overview") || 
+    window.location.pathname.includes("dashboard")) {
+    setInterval(updateDashboard, 30000); // every 30 sec
+    updateDashboard(); // run immediately on load
+}
+

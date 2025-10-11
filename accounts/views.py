@@ -27,6 +27,7 @@ def login_view(request):
             # Create a unique session identifier
             session_id = str(uuid.uuid4())
             request.session["session_id"] = session_id
+            request.session["user_id"] = user.user_id
             request.session["user_email"] = user.email
             request.session["user_role"] = user.role
             request.session["login_time"] = timezone.now().isoformat()
