@@ -19,6 +19,8 @@ from django.http import HttpResponse, Http404, JsonResponse
 from accounts.models import CustomUser
 from web3.exceptions import ContractLogicError
 load_dotenv() 
+from Adafruit_IO import Client 
+from Adafruit_IO import RequestError
 
 
 
@@ -58,15 +60,50 @@ web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 # Get the deployer account address from the private key
 deployer_account = Account.from_key(DEPLOYER_PRIVATE_KEY)
 DEPLOYER_ADDRESS = deployer_account.address # The address used for transactions
+TEMP_FEED = 'text-feed'
+TEMP_THRESHOLD = 20.0 	# Example threshold value (°C) - Kept from alpha.py for consistency
+THRESHOLD_DURATION = 300 	# 5 minutes in seconds (5 * 60)
+
+ADAFRUIT_IO_USERNAME = ''
+ADAFRUIT_IO_KEY = ''
+
+aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
+def _get_live_iot_data():
+  
+    if aio is None:
+        print("AIO Client not initialized. Returning mock data.")
+        # Fallback/Mock data if AIO setup failed
+        return -100.0, "N/A", "bg-secondary" 
+
+    try:
+        # Fetch the latest value from the temperature feed
+        temp_str = aio.receive(TEMP_FEED).value
+        temperature = float(temp_str)
+        temperature_str = f"{temperature:.1f}°C"
+
+        if temperature > TEMP_THRESHOLD:
+            status_class = "status-warning" # A custom class, maybe 'bg-warning' in Bootstrap
+        else:
+            status_class = "status-normal"
+            
+        return temperature, temperature_str, status_class
+        
+    except RequestError as e:
+        print(f"Error fetching Temperature feed from Adafruit IO: {e}")
+    except ValueError:
+        print("Invalid temperature value received from feed.")
+    except Exception as e:
+        print(f"An unexpected error occurred during IoT data fetch: {e}")
+    
+    # Return default/error values
+    return -100.0, "N/A", "bg-secondary"
 
 
 def _get_current_temp(threshold_float):
     """Mocks a live temperature reading based on the threshold."""
     current_temp_mock = IoTData.objects.latest('recorded_at').temperature
     return f"{current_temp_mock:.1f}°C", current_temp_mock
-
-
-# --- CONTRACT DEPLOYMENT LOGIC (NOW USES CHAR(42) ADDRESSES) ---
 
 def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity):
     """
