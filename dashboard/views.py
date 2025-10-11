@@ -266,7 +266,7 @@ def _get_current_temp(threshold_float):
     current_temp_mock = IoTData.objects.latest('recorded_at').temperature
     return f"{current_temp_mock:.1f}°C", current_temp_mock
 
-def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity):
+def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity, EndCoords):
     """
     Compiles, signs, and sends the deployment and initial Refund transactions 
     to the Sepolia testnet, then saves contract details using the Django ORM.
@@ -358,7 +358,8 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     latest_iot_contract = IoTDevice.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
     next_contract_id = (latest_iot_contract or 0) + 1
     print(f"10. Saving contract details to database (Attempting ID: {next_contract_id}).")
-    
+    user = CustomUser.objects.get(m_address=BuyerAddress)
+    EndCoords = f"{user.latitude},{user.longitude}" # FORMAT: "lat lon"
     new_contract = Contract.objects.create(
     contract_id=next_contract_id,
     
