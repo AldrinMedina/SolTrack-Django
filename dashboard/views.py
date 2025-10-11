@@ -64,6 +64,7 @@ TEMP_FEED = 'text-feed'
 TEMP_THRESHOLD = 20.0 	# Example threshold value (°C) - Kept from alpha.py for consistency
 THRESHOLD_DURATION = 300 	# 5 minutes in seconds (5 * 60)
 
+
 ADAFRUIT_IO_USERNAME = ''
 ADAFRUIT_IO_KEY = ''
 
@@ -531,31 +532,39 @@ def process_contract_action(request, contract_id):
     
     
 @login_required(login_url='login')
+@login_required(login_url='login')
 def ongoing_view(request):
     user = request.user
     user_role = user.role.lower()
 
-    # 🧩 Filter contracts based on role
+    # FIX 1: Ensure contract filtering matches JSON view (as noted in the previous answer)
     if user_role == "buyer":
-        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"])
+        contracts = Contract.objects.filter(buyer=user, status__in=["Ongoing", "In Transit"])
     elif user_role == "seller":
-        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"])
+        contracts = Contract.objects.filter(seller=user, status__in=["Ongoing", "In Transit"])
     else:  # admin
         contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+
+    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
+    live_temp_float, live_temp_str, _ = _get_live_iot_data()
 
     # 🌡️ Prepare ongoing shipment data
     ongoing_data = []
     for contract in contracts:
-        latest_temp = (
-            IoTData.objects.filter(device_id=1).latest('recorded_at').temperature
-        )
+        # FIX 2: Use the live_temp_str instead of the DB query
+        
+        # Determine temperature display (use "N/A" if the fetch failed)
+        current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
+
 
         ongoing_data.append({
             "contract_id": contract.contract_id,
             "product_name": contract.product_name,
-            "temperature": latest_temp,
+            # Use the live temperature string
+            "temperature": current_temp_display, 
             "status": contract.status,
-            "threshold": contract.temperature_threshold,
+            "min_temp": contract.min_temp,
+            "max_temp": contract.max_temp,
             "buyer_name": contract.buyer.full_name if contract.buyer else "—",
             "seller_name": contract.seller.full_name if contract.seller else "—",
         })
@@ -567,7 +576,44 @@ def ongoing_view(request):
 
     return render(request, "dashboard/ongoing.html", context)
 
-# In views.py
+
+@login_required(login_url='login')
+def ongoing_data_json(request):
+    user = request.user
+    user_role = user.role.lower()
+
+    # 1. Filter contracts based on role (already correct)
+    if user_role == "buyer":
+        contracts = Contract.objects.filter(buyer=user, status__in=["Ongoing", "In Transit"])
+    elif user_role == "seller":
+        contracts = Contract.objects.filter(seller=user, status__in=["Ongoing", "In Transit"])
+    else:  # admin
+        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+
+    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
+    live_temp_float, live_temp_str, _ = _get_live_iot_data()
+    
+    # 2. Determine temperature display (use "N/A" if the fetch failed)
+    temperature_display = live_temp_str if live_temp_float != -100.0 else "N/A"
+        
+
+    # 3. Build the JSON response data
+    ongoing_data_list = []
+    
+    for contract in contracts:
+        ongoing_data_list.append({
+            "contract_id": contract.contract_id,
+            "product_name": contract.product_name,
+            # CRITICAL FIX: Use the live temperature string from Adafruit IO
+            "temperature": temperature_display, 
+            "status": contract.status,
+            "min_temp": contract.min_temp,
+            "max_temp": contract.max_temp,
+            "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else "—",
+            "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else "—",
+        })
+
+    return JsonResponse({"ongoing_data": ongoing_data_list})
 
 @login_required(login_url='login')
 def completed_view(request):

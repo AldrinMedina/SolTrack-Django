@@ -12,5 +12,6 @@ urlpatterns = [
     path('completed/', views.completed_view, name='completed'),
     path('alerts/', views.alerts_view, name='alerts'),
     path('analytics/', views.analytics_view, name='analytics'),
+    path('ongoing/data/', views.ongoing_data_json, name='ongoing_data_json'),
 ]
 
