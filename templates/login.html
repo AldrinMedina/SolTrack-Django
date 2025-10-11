@@ -46,46 +46,27 @@
             <form method="post" action="{% url 'login' %}">
                 {% csrf_token %}
 
-                <!-- Username/Email input -->
+                <!-- Email input -->
                 <div class="modern-input">
-                    <label for="id_username" class="form-label">Username or Email</label>
-                    <input type="text" name="username" class="form-control" id="id_username" placeholder="Enter your credentials" required>
+                    <label for="id_email" class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control" id="id_email" placeholder="Enter your email" required>
                 </div>
-                
+
                 <!-- Password input -->
                 <div class="modern-input position-relative">
                     <label for="id_password" class="form-label">Password</label>
                     <input type="password" name="password" class="form-control" id="id_password" placeholder="Enter your password" required>
                 </div>
                 
-                <!-- Login button -->
                 <button type="submit" class="login-btn">
                     Sign In
                 </button>
-                
-                <!-- Security badge -->
+
                 <div class="security-badge">
                     <i class="bi bi-shield-check"></i>
                     <span>🔒 Secure Login with Django Auth</span>
                 </div>
 
-                <!-- Demo credentials -->
-                <div class="demo-credentials">
-                    <div class="demo-title">
-                        <i class="bi bi-info-circle"></i>
-                        <span>Demo Credentials</span>
-                    </div>
-                    <div class="mb-1">
-                        <small class="text-muted">Username:</small><br>
-                        <code class="demo-cred">admin_acc</code>
-                    </div>
-                    <div>
-                        <small class="text-muted">Password:</small><br>
-                        <code class="demo-cred">admin_acc1234</code>
-                    </div>
-                </div>
-
-                <!-- Back to home -->
                 <div class="text-center mt-3">
                     <a href="{% url 'index' %}" class="text-decoration-none" style="color: #6366f1;">
                         <i class="bi bi-arrow-left me-2"></i>Back to Home

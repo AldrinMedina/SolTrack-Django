@@ -1,20 +1,36 @@
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from django.utils import timezone 
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.db import models
+from django.db.models import Avg
 import random 
 import json 
 import datetime
 from web3 import Web3
-from solcx import compile_source
-from .models import Contract 
+from solcx import compile_source, install_solc, set_solc_version
+from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData
+from accounts.models import CustomUser
 import os
 from dotenv import load_dotenv # NEW
 from eth_account import Account # NEW
+from django.http import HttpResponse, Http404, JsonResponse
+from accounts.models import CustomUser
+from web3.exceptions import ContractLogicError
 load_dotenv() 
+
+
 
 SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL")
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
+
+# Make sure the version is installed
+install_solc('0.5.16')
+
+# Use Solidity 0.5.16 for compilation
+set_solc_version('0.5.16')
+
 # Solidity Code (SimpleTransfer Contract)
 solidity_code = '''
 pragma solidity 0.5.16;
@@ -42,9 +58,11 @@ web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 # Get the deployer account address from the private key
 deployer_account = Account.from_key(DEPLOYER_PRIVATE_KEY)
 DEPLOYER_ADDRESS = deployer_account.address # The address used for transactions
+
+
 def _get_current_temp(threshold_float):
     """Mocks a live temperature reading based on the threshold."""
-    current_temp_mock = random.uniform(threshold_float - 1, threshold_float + 2)
+    current_temp_mock = IoTData.objects.latest('recorded_at').temperature
     return f"{current_temp_mock:.1f}°C", current_temp_mock
 
 
@@ -83,7 +101,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
         'from': DEPLOYER_ADDRESS,
         'nonce': nonce,
         'gasPrice': web3.eth.gas_price, 
-        'gas': 2000000 
+        'gas':  65394 
     })
     
     # Sign the transaction locally with the private key
@@ -118,7 +136,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
         'nonce': nonce,
         'value': amount_wei,
         'gasPrice': web3.eth.gas_price,
-        'gas': 2000000 
+        'gas':  65394
     })
     
     # Sign and send the second transaction
@@ -139,15 +157,15 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     MAX_INT_VALUE = 2147483647
     buyer_id_int = abs(hash(BuyerAddress)) % MAX_INT_VALUE
     seller_id_int = abs(hash(SellerAddress)) % MAX_INT_VALUE
-    latest_iot_contract = iot_devices.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
+    latest_iot_contract = IoTDevice.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
     next_contract_id = (latest_iot_contract or 0) + 1
     print(f"10. Saving contract details to database (Attempting ID: {next_contract_id}).")
     
     new_contract = Contract.objects.create(
     contract_id=next_contract_id,
     # PASS THE FULL STRING ADDRESSES DIRECTLY:
-    buyer_address=BuyerAddress,   # <-- CORRECT
-    seller_address=SellerAddress, # <-- CORRECT 
+    buyer_address="0x13994f68615c9c578745339188cc165f4ef9959c",   # <-- CORRECT
+    seller_address="0x1A947d2CfcF6a4EF915a4049077BfE9acc7Ddb0D", # <-- CORRECT 
     
     product_name=ProductName,
     quantity=Quantity, 
@@ -166,9 +184,116 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     
     
     return contract_address
-def overview_view(request):
-    return render(request, "dashboard/overview.html")
 
+@login_required(login_url='login')
+def overview_view(request):
+    user = request.user  # The currently logged-in user
+
+    # 🧠 Determine the user role (Buyer/Seller/Admin)
+    user_role = user.role
+
+    # 🧩 Filter contracts based on user role
+    if user_role.lower() == "buyer":
+        contracts = Contract.objects.filter(buyer=user)
+    elif user_role.lower() == "seller":
+        contracts = Contract.objects.filter(seller=user)
+    else:  # Admin sees all
+        contracts = Contract.objects.all()
+
+    # 📊 Count stats
+    total_contracts = contracts.count()
+    active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
+    completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+
+    # --- IOT DATA METRICS ---
+    iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
+    avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
+
+    total_records = iot_data.count()
+    normal_records = iot_data.filter(result="Normal").count()
+    success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
+
+    # --- ALERTS ---
+    alerts = Alert.objects.filter(device__contract__in=contracts)
+    active_alerts = alerts.filter(status="Active")
+    active_alert_count = active_alerts.count()
+
+    # Active sensors (linked to active contracts)
+    active_sensors = IoTDevice.objects.filter(
+        contract__in=contracts.filter(status__in=["Active", "In Transit"])
+    )
+
+    # Recent temperature readings for chart
+    temp_history = (
+        iot_data.order_by("-recorded_at")[:10]  # get latest 10 readings
+        .values_list("recorded_at", "avg_temp")
+    )
+    chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
+    chart_values = [t[1] for t in reversed(temp_history)]
+
+    context = {
+        "user_role": user_role,
+        "total_contracts": total_contracts,
+        "active_contracts": active_contracts,
+        "completed_contracts": completed_contracts,
+        "avg_temp": round(avg_temp, 2),
+        "success_rate": success_rate,
+        "active_sensors": active_sensors,
+        "active_alerts": active_alerts,
+        "active_alert_count": active_alert_count,
+        "chart_labels_json": json.dumps(chart_labels),
+        "chart_values_json": json.dumps(chart_values)
+    }
+
+    return render(request, "dashboard/overview.html", context)
+
+def dashboard_data(request):
+    user = request.user
+    user_role = user.role
+
+    # 🧠 Filter based on role
+    if user_role.lower() == "buyer":
+        contracts = Contract.objects.filter(buyer=user)
+    elif user_role.lower() == "seller":
+        contracts = Contract.objects.filter(seller=user)
+    else:
+        contracts = Contract.objects.all()
+
+    # Contract stats
+    total_contracts = contracts.count()
+    active_contracts = contracts.filter(status__in=["Active"]).count()
+    ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
+    completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+
+    # 🌡️ Temperature stats
+    iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
+    avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
+
+    total_records = iot_data.count()
+    normal_records = iot_data.filter(result="Normal").count()
+    success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
+
+    # 🚨 Alerts
+    active_alerts = Alert.objects.filter(device__contract__in=contracts, status="Active").count()
+
+    # 📈 Chart data (latest 10 readings)
+    temp_history = (
+        iot_data.order_by("-recorded_at")[:10]
+        .values_list("recorded_at", "avg_temp")
+    )
+    chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
+    chart_values = [t[1] for t in reversed(temp_history)]
+
+    return JsonResponse({
+        "total_contracts": total_contracts,
+        "active_contracts": active_contracts,
+        "completed_contracts": completed_contracts,
+        "avg_temp": round(avg_temp, 2),
+        "success_rate": success_rate,
+        "active_alerts": active_alerts,
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
+    })
 
 def active_view(request):
     
@@ -216,9 +341,16 @@ def active_view(request):
 def create_contract_view(request):
     if request.method == 'POST':
         try:
+            
+            seller_id = int(request.POST.get('seller_id'))
+            buyer_id = int(request.POST.get('buyer_id'))
             # 1. Get ALL required data from the POST request
-            buyer_address = request.POST.get('buyer_address')
-            seller_address = request.POST.get('seller_address')
+            # buyer_address = request.POST.get('buyer_address')
+            buyer = CustomUser.objects.get(user_id=buyer_id)
+            seller = CustomUser.objects.get(user_id=seller_id)
+            buyer_address = "0x13994f68615c9c578745339188cc165f4ef9959c"
+            # seller_address = request.POST.get('seller_address')
+            seller_address = "0x1A947d2CfcF6a4EF915a4049077BfE9acc7Ddb0D"
             product_name = request.POST.get('product_name')
             
             # Convert to correct types
@@ -307,7 +439,7 @@ def process_contract_action(request, contract_id):
             'nonce': nonce,
             'value': AMOUNT_TO_SEND,
             'gasPrice': web3.eth.gas_price, 
-            'gas': 2000000 
+            'gas':  65394 
         })
         
         signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=DEPLOYER_PRIVATE_KEY)
@@ -351,14 +483,58 @@ def process_contract_action(request, contract_id):
     
     
     
+@login_required(login_url='login')
 def ongoing_view(request):
-    return render(request, 'dashboard/ongoing.html')
+    user = request.user
+    user_role = user.role.lower()
+
+    # 🧩 Filter contracts based on role
+    if user_role == "buyer":
+        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"])
+    elif user_role == "seller":
+        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"])
+    else:  # admin
+        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+
+    # 🌡️ Prepare ongoing shipment data
+    ongoing_data = []
+    for contract in contracts:
+        latest_temp = (
+            IoTData.objects.filter(device_id=1).latest('recorded_at').temperature
+        )
+
+        ongoing_data.append({
+            "contract_id": contract.contract_id,
+            "product_name": contract.product_name,
+            "temperature": latest_temp,
+            "status": contract.status,
+            "threshold": contract.temperature_threshold,
+            "buyer_name": contract.buyer.full_name if contract.buyer else "—",
+            "seller_name": contract.seller.full_name if contract.seller else "—",
+        })
+
+    context = {
+        "ongoing_data": ongoing_data,
+        "user_role": user_role,
+    }
+
+    return render(request, "dashboard/ongoing.html", context)
 
 # In views.py
 
+@login_required(login_url='login')
 def completed_view(request):
+    user = request.user
+    user_role = request.session.get("user_role", "").lower()
+
     try:
-        contracts_queryset = Contract.objects.filter(status='Completed').all()
+        # Filter contracts by role
+        if user_role == "buyer":
+            contracts_queryset = Contract.objects.filter(status='Completed')
+        elif user_role == "seller":
+            contracts_queryset = Contract.objects.filter(status='Completed')
+        else:  # Admin sees all
+            contracts_queryset = Contract.objects.filter(status='Completed')
     except Exception as e:
         print(f"Database query error: {e}")
         contracts_queryset = []
@@ -368,12 +544,12 @@ def completed_view(request):
     for contract_instance in contracts_queryset:
         status = 'Complete'
         status_class = 'primary'
-        temp_threshold_float = contract_instance.temperature_threshold
-        final_temp_str = f"{temp_threshold_float - 0.5:.1f}°C" 
-
+        temp_threshold_float = contract_instance.temperature_threshold or 0
+        # final_temp_str = f"{temp_threshold_float - 0.5:.1f}°C" 
+        final_temp_str = f"{IoTData.objects.latest('recorded_at').temperature:.1f}°C"
         completed_contracts.append({
             'contract': contract_instance,
-            'current_temp': final_temp_str, 
+            'current_temp': final_temp_str,
             'status': status,
             'status_class': status_class,
         })
@@ -384,8 +560,43 @@ def completed_view(request):
     
     return render(request, 'dashboard/completed.html', context)
 
+
+@login_required(login_url='login')
 def alerts_view(request):
-    return render(request, 'dashboard/alerts.html')
+    user = request.user
+    user_role = user.role.lower()
+
+    # Filter contracts based on user role
+    if user_role == "buyer":
+        contracts = Contract.objects.filter(buyer=user)
+    elif user_role == "seller":
+        contracts = Contract.objects.filter(seller=user)
+    else:  # Admin sees all
+        contracts = Contract.objects.all()
+
+    # Get devices linked to those contracts
+    devices = IoTDevice.objects.filter(contract__in=contracts)
+
+    # Get alerts only from those devices
+    alerts = Alert.objects.filter(device__in=devices).select_related('device').order_by('-triggered_at')
+
+    context = {
+        "alerts": alerts,
+        "user_role": user_role
+    }
+
+    return render(request, "dashboard/alerts.html", context)
 
 def analytics_view(request):
     return render(request, 'dashboard/analytics.html')
+
+def download_license(request, user_id):
+    try:
+        user = CustomUser.objects.get(pk=user_id)
+        if not user.business_license:
+            raise Http404("No license uploaded")
+        response = HttpResponse(user.business_license, content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="license_{user_id}.pdf"'
+        return response
+    except CustomUser.DoesNotExist:
+        raise Http404("User not found")

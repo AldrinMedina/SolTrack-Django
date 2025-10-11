@@ -17,36 +17,48 @@
 
     <!-- Key Metrics -->
     <div class="row g-4 mb-4">
+        <!-- Average Temperature -->
         <div class="col-xl-3 col-md-6">
             <div class="metric-card text-center">
                 <div class="temp-gauge mx-auto mb-3">
-                    <div class="temp-value">-2°C</div>
+                    <div class="temp-value" id="avgTemp">{{ avg_temp }}°C</div>
                 </div>
                 <h6 class="fw-bold text-dark mb-1">Avg Temperature</h6>
-                <span class="badge status-normal px-3 py-2 rounded-pill">
-                    <i class="bi bi-check-circle me-1"></i>Normal
+                <span class="badge {% if avg_temp > -1 and avg_temp < 8 %}status-normal{% else %}status-warning{% endif %} px-3 py-2 rounded-pill">
+                    <i class="bi bi-check-circle me-1"></i>
+                    {% if avg_temp > -1 and avg_temp < 8 %}Normal{% else %}Warning{% endif %}
                 </span>
             </div>
         </div>
+
         <div class="col-xl-3 col-md-6">
             <div class="metric-card text-center">
-                <div class="display-6 text-primary fw-bold mb-2">20</div>
+                <!-- Total Contracts -->
+                <div class="display-6 text-primary fw-bold mb-2" id="totalContracts">{{ total_contracts }}</div>
                 <h6 class="fw-bold text-dark mb-1">Total Contracts</h6>
-                <small class="text-muted">8 active, 12 completed</small>
+                <small class="text-muted" id="contractBreakdown">{{ active_contracts }} active, {{ completed_contracts }} completed</small>
             </div>
         </div>
+
+        <!-- Success Rate -->
         <div class="col-xl-3 col-md-6">
             <div class="metric-card text-center">
-                <div class="display-6 text-success fw-bold mb-2">98.5%</div>
+                <div class="display-6 text-success fw-bold mb-2">{{ success_rate }}%</div>
                 <h6 class="fw-bold text-dark mb-1">Success Rate</h6>
                 <small class="text-muted">Within temperature range</small>
             </div>
         </div>
+
+        <!-- Active Alerts -->
         <div class="col-xl-3 col-md-6">
             <div class="metric-card text-center">
-                <div class="display-6 text-warning fw-bold mb-2">2</div>
+                <div class="display-6 text-warning fw-bold mb-2" id="activeAlerts">{{ active_alert_count }}</div>
                 <h6 class="fw-bold text-dark mb-1">Active Alerts</h6>
-                <small class="text-danger">Requires attention</small>
+                {% if active_alert_count > 0 %}
+                    <small class="text-danger">Requires attention</small>
+                {% else %}
+                    <small class="text-muted">All clear</small>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -54,7 +66,7 @@
     <!-- Real-time Monitoring -->
     <div class="row g-4">
         <div class="col-lg-8">
-            <div class="chart-container">
+            <div class="chart-container h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold text-dark mb-0">Real-time Temperature Monitoring</h5>
                     <div class="d-flex align-items-center">
@@ -65,42 +77,25 @@
                 <canvas id="temperatureChart"></canvas>
             </div>
         </div>
+        <!-- Active Sensors -->
         <div class="col-lg-4">
             <div class="chart-container h-100">
                 <h5 class="fw-bold text-dark mb-3">Active Sensors</h5>
                 <div class="d-flex flex-column gap-3">
+                    {% for sensor in active_sensors %}
                     <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
                         <div>
-                            <div class="fw-semibold text-dark">Sensor #001</div>
-                            <small class="text-muted">Pfizer Shipment A</small>
+                            <div class="fw-semibold text-dark">{{ sensor.device_name }}</div>
+                            <small class="text-muted">{{ sensor.contract.product_name }}</small>
                         </div>
                         <div class="text-end">
-                            <div class="fw-bold text-success">-1.2°C</div>
+                            <div class="fw-bold text-success">Active</div>
                             <span class="badge status-normal">Normal</span>
                         </div>
                     </div>
-
-                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
-                        <div>
-                            <div class="fw-semibold text-dark">Sensor #002</div>
-                            <small class="text-muted">Moderna Batch B</small>
-                        </div>
-                        <div class="text-end">
-                            <div class="fw-bold text-warning">-8.1°C</div>
-                            <span class="badge status-warning">Warning</span>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
-                        <div>
-                            <div class="fw-semibold text-dark">Sensor #003</div>
-                            <small class="text-muted">J&amp;J Delivery C</small>
-                        </div>
-                        <div class="text-end">
-                            <div class="fw-bold text-success">-2.8°C</div>
-                            <span class="badge status-normal">Normal</span>
-                        </div>
-                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted">No active sensors at the moment</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -110,14 +105,17 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    const labels = JSON.parse('{{ chart_labels_json|escapejs }}');
+    const values = JSON.parse('{{ chart_values_json|escapejs }}');
+
     const ctx = document.getElementById('temperatureChart');
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: ['12:00', '12:05', '12:10', '12:15', '12:20', '12:25'],
+            labels: labels,
             datasets: [{
                 label: 'Temperature (°C)',
-                data: [-2, -2.1, -1.8, -2.2, -2.0, -2.1],
+                data: values,
                 borderColor: '#0d6efd',
                 borderWidth: 2,
                 fill: false,
@@ -130,10 +128,13 @@
                 y: {
                     beginAtZero: false,
                     suggestedMin: -10,
-                    suggestedMax: 5
+                    suggestedMax: 10
                 }
             }
         }
     });
+
+
 </script>
+
 {% endblock %}

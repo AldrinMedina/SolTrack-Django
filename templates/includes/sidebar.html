@@ -9,32 +9,32 @@
             </a>
             <a href="{% url 'active' %}" class="nav-link nav-link-custom">
                 <i class="bi bi-play-circle me-2"></i>Active Contracts
-                <span class="badge bg-success ms-auto">3</span>
+                <span class="badge bg-success ms-auto" id="activeBadge">0</span>
             </a>
             <a href="{% url 'ongoing' %}" class="nav-link nav-link-custom">
                 <i class="bi bi-clock me-2"></i>Ongoing Shipments
-                <span class="badge bg-warning ms-auto">5</span>
+                <span class="badge bg-warning ms-auto" id="ongoingBadge">0</span>
             </a>
             <a href="{% url 'completed' %}" class="nav-link nav-link-custom">
                 <i class="bi bi-check-circle me-2"></i>Completed
-                <span class="badge bg-primary ms-auto">12</span>
+                <span class="badge bg-primary ms-auto" id="completedBadge">0</span>
             </a>
             <a href="{% url 'alerts' %}" class="nav-link nav-link-custom">
                 <i class="bi bi-exclamation-triangle me-2"></i>Alerts
-                <span class="badge bg-danger ms-auto">2</span>
+                <span class="badge bg-danger ms-auto" id="alertsBadge">0</span>
             </a>
-            <a href="{% url 'analytics' %}" class="nav-link nav-link-custom">
+            <!-- <a href="{% url 'analytics' %}" class="nav-link nav-link-custom">
                 <i class="bi bi-graph-up me-2"></i>Analytics
-            </a>
+            </a> -->
         </nav>
     </div>
     <div class="p-4 mt-auto">
         <div class="glass-card p-3 text-center">
             <div class="d-flex align-items-center justify-content-center mb-2">
-                <div class="pulse-dot bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
+                <div id="systemDot" class="pulse-dot bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
                 <small class="text-white">System Status</small>
             </div>
-            <small class="text-white opacity-75">All sensors online</small>
+            <small class="text-white opacity-75" id="systemStatus">All sensors online</small>
         </div>
     </div>
 </div>

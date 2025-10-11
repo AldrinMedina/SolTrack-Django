@@ -3,7 +3,8 @@ from . import views
 
 
 urlpatterns = [
-    path("", views.overview_view, name="overview"),
+    path("overview/", views.overview_view, name="overview"),
+    path('overview/data/', views.dashboard_data, name='dashboard_data'),
     path('active/', views.active_view, name='active'),
     path('contract/create/', views.create_contract_view, name='create_contract'),
     path('contract/<int:contract_id>/action/', views.process_contract_action, name='process_contract_action'),

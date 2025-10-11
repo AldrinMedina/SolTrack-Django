@@ -18,79 +18,49 @@
                     <tr>
                         <th class="border-0 fw-semibold">Shipment ID</th>
                         <th class="border-0 fw-semibold">Vaccine Type</th>
-                        <th class="border-0 fw-semibold">Current Location</th>
                         <th class="border-0 fw-semibold">Temperature</th>
                         <th class="border-0 fw-semibold">Status</th>
-                        <th class="border-0 fw-semibold">ETA</th>
+                        <th class="border-0 fw-semibold">Buyer</th>
+                        <th class="border-0 fw-semibold">Seller</th>
                         <th class="border-0 fw-semibold">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
+                    {% for shipment in ongoing_data %}
                     <tr>
-                        <td class="fw-medium">#SH-001</td>
-                        <td>Pfizer-BioNTech</td>
-                        <td>Manila → Cebu</td>
-                        <td><span class="badge status-normal">-1.5°C</span></td>
-                        <td><span class="badge bg-success">Normal</span></td>
-                        <td>2h 30m</td>
+                        <td class="fw-medium">#{{ shipment.contract_id }}</td>
+                        <td>{{ shipment.product_name }}</td>
+                        <td>
+                            {% if shipment.temperature == "N/A" %}
+                                <span class="badge bg-secondary">No Data</span>
+                            {% elif shipment.temperature|floatformat:1 < shipment.threshold %}
+                                <span class="badge status-warning">{{ shipment.temperature }}°C</span>
+                            {% else %}
+                                <span class="badge status-normal">{{ shipment.temperature }}°C</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if shipment.status == "In Transit" %}
+                                <span class="badge bg-info text-dark">{{ shipment.status }}</span>
+                            {% else %}
+                                <span class="badge bg-success">{{ shipment.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ shipment.buyer_name }}</td>
+                        <td>{{ shipment.seller_name }}</td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-eye"></i>
                             </button>
                         </td>
                     </tr>
+                    {% empty %}
                     <tr>
-                        <td class="fw-medium">#SH-002</td>
-                        <td>Moderna</td>
-                        <td>Cebu → Davao</td>
-                        <td><span class="badge status-warning">-7.8°C</span></td>
-                        <td><span class="badge bg-warning">Alert</span></td>
-                        <td>5h 15m</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </button>
+                        <td colspan="7" class="text-center text-muted py-3">
+                            No ongoing shipments found.
                         </td>
                     </tr>
-                    <tr>
-                        <td class="fw-medium">#SH-003</td>
-                        <td>J&J</td>
-                        <td>Davao → Cagayan</td>
-                        <td><span class="badge status-normal">-2.1°C</span></td>
-                        <td><span class="badge bg-success">Normal</span></td>
-                        <td>8h 45m</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="fw-medium">#SH-004</td>
-                        <td>AstraZeneca</td>
-                        <td>Manila → Baguio</td>
-                        <td><span class="badge status-normal">-1.8°C</span></td>
-                        <td><span class="badge bg-success">Normal</span></td>
-                        <td>3h 20m</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="fw-medium">#SH-005</td>
-                        <td>Sinovac</td>
-                        <td>Cebu → Iloilo</td>
-                        <td><span class="badge status-normal">-2.5°C</span></td>
-                        <td><span class="badge bg-success">Normal</span></td>
-                        <td>4h 10m</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </td>
-                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>

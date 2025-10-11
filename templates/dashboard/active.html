@@ -57,26 +57,14 @@
                             <span class="display-6 fw-bold text-dark">{{ item.current_temp }}</span>
                             <small class="text-muted d-block">Current Temp</small>
                         </div>
-                        <div>
-                            <span class="fw-bold text-muted">{{ contract.end_date|date:"M d, Y" }}</span>
-                            <small class="text-muted">Time Remaining</small>
-                        </div>
+                        
                     </div>
 
                     <div class="progress mb-3" style="height: 8px;">
                         <div class="progress-bar bg-{{ status_class }}" style="width: {{ item.progress_percent|default_if_none:0 }}%;"></div>
 
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <small class="text-muted">Progress: {{ item.progress_percent|default:"0" }}%</small>
-                        <small class="text-muted">
-                            {% if item.status == 'Alert' %}
-                                <span class="text-warning">Temperature breach detected</span>
-                            {% else %}
-                                On schedule
-                            {% endif %}
-                        </small>
-                    </div>
+                   
 
                     <div class="d-flex gap-2 mt-4">
     
@@ -128,12 +116,12 @@
                         <div class="col-md-6">
                             <h6 class="fw-bold text-dark mb-3">Addresses</h6>
                             <div class="mb-3">
-                                <label for="buyer_address" class="form-label">Buyer Address</label>
-                                <input type="text" class="form-control" id="buyer_address" name="buyer_address" placeholder="0x..." required>
+                                <label for="buyer_id" class="form-label">Buyer Address</label>
+                                <input type="text" class="form-control" id="buyer_id" name="buyer_id" placeholder="0x..." required>
                             </div>
                             <div class="mb-3">
-                                <label for="seller_address" class="form-label">Seller Address</label>
-                                <input type="text" class="form-control" id="seller_address" name="seller_address" placeholder="0x..." required>
+                                <label for="seller_id" class="form-label">Seller Address</label>
+                                <input type="text" class="form-control" id="seller_id" name="seller_id" placeholder="0x..." required>
                             </div>
                             <div class="mb-3">
                                 <label for="quantity" class="form-label">Quantity (Units)</label>

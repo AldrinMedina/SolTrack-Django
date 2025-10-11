@@ -20,12 +20,24 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
+    class Role(models.TextChoices):
+        BUYER = 'Buyer', 'Buyer'
+        SELLER = 'Seller', 'Seller'
+        ADMIN = 'Admin', 'Admin'
+    role = models.CharField(
+        max_length=10,
+        choices=Role.choices,
+        default=Role.BUYER
+    )
     user_id = models.BigAutoField(primary_key=True)
     full_name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
-    role = models.CharField(max_length=20, default='buyer')
+    m_address = models.CharField(max_length=100, blank=True, null=True)
     organization = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
+
+    business_license = models.BinaryField(blank=True, null=True)
+
 
     # Map existing password_hash column
     password = models.CharField(max_length=255, db_column='password_hash')
@@ -33,6 +45,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # Required for Django admin & permissions
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    is_approved = models.BooleanField(default=False)
 
     objects = CustomUserManager()
 
