@@ -25,7 +25,9 @@ class Contract(models.Model):
 
     min_temp = models.FloatField(default=2) # Or another suitable default
     max_temp = models.FloatField(default=8) 
-
+    start_coords = models.CharField(max_length=50, null=True, blank=True) # Seller's location upon activation
+    end_coords = models.CharField(max_length=50, null=True, blank=True)   # Buyer's location upon creation
+    
     # Matches DB: VARCHAR(50). Default should match your DB if possible, but 'active' works for filtering.
     status = models.CharField(max_length=50,  choices=[
         ('Active', 'Active'),
