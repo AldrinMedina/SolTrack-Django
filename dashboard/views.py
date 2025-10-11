@@ -83,6 +83,86 @@ ADAFRUIT_IO_KEY = ''
 
 aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
 
+FIXED_ESCROW_FEE_ETH = 0.01 
+
+@login_required(login_url='login')
+def activate_contract(request, contract_id):
+    """
+    Handles contract activation:
+    1. Calculates total ETH: FIXED_ESCROW_FEE_ETH (0.01) + contract_db.price.
+    2. Sends the total amount from the LOGGED-IN USER'S m_address to the DEPLOYER_ADDRESS (escrow).
+    3. Sets the Seller's m_address location as start_coords.
+    4. Updates the contract status to 'Ongoing'.
+    """
+    
+    if request.method != 'POST':
+        return HttpResponseRedirect(reverse('active'))
+
+    try:
+        # --- 1. Retrieve Contract Data and Coords ---
+        contract_db = Contract.objects.get(contract_id=contract_id)
+        
+        sender_address = request.user.m_address 
+        escrow_address = DEPLOYER_ADDRESS 
+
+        # --- NEW: Get Seller's coordinates from POST data (Start Coords) ---
+        seller_lat = request.POST.get('client_lat')
+        seller_lon = request.POST.get('client_lon')
+        start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
+        
+        # --- 2. Web3 Setup and Amount Calculation ---
+        if not web3.is_connected():
+            raise ConnectionError("Web3 not connected. Check RPC URL.")
+            
+        nonce = web3.eth.get_transaction_count(sender_address)
+        
+        # Calculate the total amount to send: Fixed Fee + Contract Price
+        price_eth = float(contract_db.price)
+        total_eth_to_send = FIXED_ESCROW_FEE_ETH + price_eth
+        
+        # Convert the total amount to Wei
+        amount_to_send_wei = web3.to_wei(total_eth_to_send, 'ether')
+        
+        print(f"\n[{timezone.now()}] STARTING ACTIVATION:")
+        print(f"  Total ETH: {total_eth_to_send} (Fixed: {FIXED_ESCROW_FEE_ETH} + Price: {price_eth})")
+        print(f"  Sender: {sender_address}")
+        
+        # --- 3. Build Raw ETH Transfer Transaction ---
+        tx_data = {
+            'chainId': web3.eth.chain_id,
+            'from': sender_address, 
+            'to': escrow_address, 
+            'nonce': nonce,
+            'value': amount_to_send_wei,
+            'gasPrice': web3.eth.gas_price, 
+            'gas':  21000 
+        }
+        
+        # --- 4. Sign and Send Transaction ---
+        signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=DEPLOYER_PRIVATE_KEY)
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        if receipt.status == 1:
+            print(f"[{timezone.now()}] SUCCESS: {total_eth_to_send} ETH transferred to escrow (Tx: {tx_hash.hex()})")
+        else:
+            raise Exception(f"Transaction failed on-chain. Status: {receipt.status}")
+
+        # --- 5. Update Database Status and Coords ---
+        contract_db.status = 'Ongoing'
+        contract_db.start_date = timezone.now()
+        contract_db.start_coords = start_coords_str # Set Seller's location as start
+        contract_db.save()
+        print(f"[{timezone.now()}] DATABASE UPDATE: Contract ID {contract_id} status updated to Ongoing.")
+        
+    except Contract.DoesNotExist:
+        print(f"[{timezone.now()}] ERROR: Contract ID {contract_id} not found.")
+    except Exception as e:
+        print(f"[{timezone.now()}] UNEXPECTED ERROR during contract activation: {e}")
+        
+    return HttpResponseRedirect(reverse('active'))
+
+
 DELIVERY_THRESHOLD_KM = 0.010 # Distance threshold to mark destination reached
 DELIVERY_COOLDOWN_SECONDS = 180 # 3 minutes (3 * 60)
 
