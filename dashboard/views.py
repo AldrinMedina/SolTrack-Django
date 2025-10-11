@@ -297,7 +297,9 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     contract_abi=abi,           # JSONField automatically handles the Python object 'abi'
     
     max_temp=5.0, 
-    status='Active'
+    status='Active',
+    end_coords=EndCoords, # Set Buyer's location as destination
+    
     )
     print("11. Database save complete. Process SUCCESSFUL.")
     
@@ -824,14 +826,17 @@ def create_contract_view(request):
             # Convert to correct types
             payment_amount = float(request.POST.get('payment_amount'))
             quantity = int(request.POST.get('quantity')) 
-            
+            buyer_lat = request.POST.get('client_lat') 
+            buyer_lon = request.POST.get('client_lon')
+            end_coords_str = f"{buyer_lat},{buyer_lon}" if buyer_lat and buyer_lon else None
             # 2. Execute the deployment and database saving logic
             contract_address = deploy_contract_and_save(
                 buyer_address, 
                 seller_address, 
                 product_name, 
                 payment_amount,
-                quantity
+                quantity,
+                end_coords_str 
             )
             
             print(f"Contract deployed successfully at: {contract_address}")
