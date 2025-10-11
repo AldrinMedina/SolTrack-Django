@@ -483,6 +483,18 @@
                 </div>
 
                 <div class="modern-input">
+                    <label for="id_address" class="form-label">Address</label>
+                    {{ form.address }}
+                    {% if form.address.errors %}
+                        <ul class="errorlist">
+                            {% for error in form.address.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+
+                <div class="modern-input">
                     <label for="id_role" class="form-label">Role</label>
                     {{ form.role }}
                     {% if form.role.errors %}
@@ -705,6 +717,7 @@
                 if (input.id === 'id_full_name') input.placeholder = 'Enter your full name';
                 if (input.id === 'id_email') input.placeholder = 'you@example.com';
                 if (input.id === 'id_organization') input.placeholder = 'Your organization name';
+                if (input.id === 'id_address') input.placeholder = 'Your organization address';
                 if (input.id === 'id_m_address') input.placeholder = '0x...';
                 if (input.id === 'id_password') input.placeholder = 'Create a strong password';
                 if (input.id === 'id_confirm_password') input.placeholder = 'Confirm your password';

@@ -16,6 +16,8 @@
                 <th>Product</th>
                 <th>Price (ETH)</th>
                 <th>Quantity</th>
+                <th>Min Temperature</th>
+                <th>Max Temperature</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
@@ -29,7 +31,10 @@
                 </td>
                 <td>{{ product.price_eth }}</td>
                 <td>{{ product.quantity_available }}</td>
+                <td>{{ product.min_temp }}°C</td>
+                <td>{{ product.max_temp }}°C</td>
                 <td>{{ product.created_at|date:"M d, Y" }}</td>
+                
                 <td>
                     <a href="{% url 'product_edit' product.pk %}" class="btn btn-sm btn-outline-primary">
                         <i class="bi bi-pencil"></i>

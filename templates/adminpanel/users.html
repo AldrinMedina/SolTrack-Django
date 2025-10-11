@@ -1,0 +1,211 @@
+{% extends 'adminpanel/base_admin.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">Users Management</h2>
+            <p class="text-muted">Manage buyers, sellers, and product managers</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" id="userTabs">
+        <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#buyers">Buyers</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#sellers">Sellers</a>
+        </li>
+        <!-- <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#managers">Product Managers</a>
+        </li> -->
+    </ul>
+
+    <div class="tab-content">
+        <!-- BUYERS TAB -->
+        <div class="tab-pane fade show active" id="buyers">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body">
+                    <h5 class="fw-bold text-dark mb-3">Buyers List</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Wallet Address</th>
+                                    <th>Registered</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in buyers %}
+                                <tr>
+                                    <td>{{ user.full_name }}</td>
+                                    <td>{{ user.email }}</td>
+                                    <td><code>{{ user.m_address|default:"N/A" }}</code></td>
+                                    <td>{{ user.created_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            {% if not user.is_approved %}
+                                            <button class="btn btn-sm btn-success" onclick="approveUser({{ user.user_id }})">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                            {% endif %}
+                                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userModal{{ user.user_id }}">
+                                                <i class="bi bi-person"></i> View
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deactivateUser({{ user.user_id }})">
+                                                <i class="bi bi-x-circle"></i> Deactivate
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Modal -->
+                                <div class="modal fade" id="userModal{{ user.user_id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">{{ user.full_name }}</h5>
+                                                <button class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p><strong>Email:</strong> {{ user.email }}</p>
+                                                <p><strong>Wallet Address:</strong> {{ user.m_address|default:"N/A" }}</p>
+                                                <p><strong>Organization:</strong> {{ user.organization|default:"—" }}</p>
+                                                <p><strong>Role:</strong> {{ user.role }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% empty %}
+                                <tr><td colspan="5" class="text-center text-muted py-3">No buyers found.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SELLERS TAB -->
+        <div class="tab-pane fade" id="sellers">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body">
+                    <h5 class="fw-bold text-dark mb-3">Sellers List</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Organization</th>
+                                    <th>Wallet</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in sellers %}
+                                <tr>
+                                    <td>{{ user.full_name }}</td>
+                                    <td>{{ user.email }}</td>
+                                    <td>{{ user.organization|default:"N/A" }}</td>
+                                    <td><code>{{ user.m_address|default:"N/A" }}</code></td>
+                                    <td>
+                                        {% if user.is_approved %}
+                                            <span class="badge bg-success">Approved</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userModal{{ user.user_id }}">
+                                                <i class="bi bi-eye"></i> View
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deactivateUser({{ user.user_id }})">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="6" class="text-center text-muted py-3">No sellers found.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRODUCT MANAGERS TAB
+        <div class="tab-pane fade" id="managers">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body">
+                    <h5 class="fw-bold text-dark mb-3">Product Managers</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Seller Assigned</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in managers %}
+                                <tr>
+                                    <td>{{ user.full_name }}</td>
+                                    <td>{{ user.email }}</td>
+                                    <td>{{ user.organization|default:"N/A" }}</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-pencil"></i> Edit
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deactivateUser({{ user.user_id }})">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="text-center text-muted py-3">No product managers found.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div> -->
+    </div>
+</div>
+
+<script>
+function approveUser(userId) {
+    fetch(`/adminpanel/approve_user/${userId}/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    }).then(res => res.json()).then(data => {
+        if (data.success) location.reload();
+    });
+}
+
+function deactivateUser(userId) {
+    if (confirm("Deactivate this user?")) {
+        fetch(`/adminpanel/deactivate_user/${userId}/`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'}
+        }).then(res => res.json()).then(data => {
+            if (data.success) location.reload();
+        });
+    }
+}
+</script>
+{% endblock %}

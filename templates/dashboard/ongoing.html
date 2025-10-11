@@ -18,55 +18,51 @@
                     <thead style="background-color: #f8f9fa;">
                         <tr>
                             <th class="px-4 py-3">Shipment ID</th>
+                            <th class="px-4 py-3">Vaccine Type</th>
+                            <th class="px-4 py-3">Temperature (°C)</th>
                             <th class="px-4 py-3">Status</th>
-                            <th class="px-4 py-3">Product Name</th>
-                            <th class="px-4 py-3">Current Temp</th>
-                            <!-- <th class="px-4 py-3">Actions</th> -->
+                            <th class="px-4 py-3">Buyer</th>
+                            <th class="px-4 py-3">Seller</th>
+                            <th class="px-4 py-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for shipment in ongoing_data %}
                         <tr>
-                            <td class="px-4 py-3">
-                                <span class="fw-medium text-dark">#{{ shipment.contract_id }}</span>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="d-flex align-items-center gap-2">
-                                    {% if shipment.status == "In Transit" %}
-                                        <span class="badge bg-info text-dark px-3 py-2 rounded-pill">{{ shipment.status }}</span>
-                                        <div class="pulse-dot bg-info rounded-circle" style="width: 8px; height: 8px;"></div>
-                                    {% elif shipment.status == "Delivered" %}
-                                        <span class="badge bg-success px-3 py-2 rounded-pill">{{ shipment.status }}</span>
-                                        <div class="pulse-dot bg-success rounded-circle" style="width: 8px; height: 8px;"></div>
-                                    {% else %}
-                                        <span class="badge bg-secondary px-3 py-2 rounded-pill">{{ shipment.status }}</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="fw-bold text-dark">{{ shipment.product_name }}</span>
-                            </td>
-
+                            <td class="px-4 py-3"><span class="fw-medium text-dark">#{{ shipment.contract_id }}</span></td>
+                            <td class="px-4 py-3"><span class="fw-bold text-dark">{{ shipment.product_name }}</span></td>
                             <td class="px-4 py-3">
                                 {% if shipment.temperature == "N/A" %}
                                     <span class="badge bg-secondary px-2 py-1">No Data</span>
                                 {% else %}
-                                    {% if shipment.temperature|floatformat:1|add:"0" < shipment.threshold|floatformat:1|add:"0" %}
-                                        <span class="fs-5 fw-bold text-warning">{{ shipment.temperature }}°C</span>
+                                    {% if shipment.temperature|floatformat:1 < shipment.threshold|floatformat:1 %}
+                                        <span class="fs-6 fw-bold text-warning">{{ shipment.temperature }}</span>
                                     {% else %}
-                                        <span class="fs-5 fw-bold text-success">{{ shipment.temperature }}°C</span>
+                                        <span class="fs-6 fw-bold text-success">{{ shipment.temperature }}</span>
                                     {% endif %}
                                 {% endif %}
                             </td>
-                            <!-- <td class="px-4 py-3">
-                                <button class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-eye"></i> View
+                            <td class="px-4 py-3">
+                                {% if shipment.status == "In Transit" %}
+                                    <span class="badge bg-info text-dark px-3 py-2 rounded-pill">{{ shipment.status }}</span>
+                                {% elif shipment.status == "Delivered" %}
+                                    <span class="badge bg-success px-3 py-2 rounded-pill">{{ shipment.status }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary px-3 py-2 rounded-pill">{{ shipment.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">{{ shipment.buyer_name }}</td>
+                            <td class="px-4 py-3">{{ shipment.seller_name }}</td>
+                            <td class="px-4 py-3">
+                                <button class="btn btn-sm btn-outline-primary view-shipment" data-id="{{ shipment.contract_id }}">
+                                    <i class="bi bi-eye"></i>
                                 </button>
-                            </td> -->
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+
             </div>
             {% else %}
             <div class="alert alert-info" role="alert">
@@ -74,6 +70,22 @@
                 No ongoing shipments found.
             </div>
             {% endif %}
+            <!-- View Shipment Modal -->
+            <div class="modal fade" id="shipmentModal" tabindex="-1" aria-hidden="true">
+                
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Shipment Details — Soltrack</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="shipmentDetails" class="text-dark"></div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>

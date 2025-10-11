@@ -159,9 +159,6 @@ function clearAllAlerts() {
 
 // Add click handlers for action buttons
 document.addEventListener('click', function(e) {
-    if (e.target.closest('.btn-outline-primary')) {
-        alert('Opening detailed monitoring view...');
-    }
     
     if (e.target.closest('.btn-danger')) {
         alert('Initiating emergency call protocol...');
@@ -241,28 +238,19 @@ function updateDashboard() {
 }
 
 function updateOngoingShipments() {
-    // 1. Fetch data from the new JSON endpoint
-    fetch('/ongoing/data/')// Using the correct URL from urls.py
+    fetch(ONGOING_DATA_URL)
         .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
+            if (!response.ok) throw new Error('Network response was not ok');
             return response.json();
         })
         .then(data => {
             const ongoingData = data.ongoing_data;
-        const tableBody = document.querySelector('#ongoing-content table tbody');
+            const tableBody = document.querySelector('#ongoing-content table tbody');
 
-        // --- CRITICAL FIX 1: CLEAR THE TABLE BODY ---
-        tableBody.innerHTML = ''; 
-            // A more efficient way: update only the relevant cells if the row exists.
-            // However, since your template does a full re-render, we'll fix 
-            // the rendering logic to correctly match the HTML structure.
-            
-            tableBody.innerHTML = ''; // Clear existing rows
+            // Clear current rows
+            tableBody.innerHTML = '';
 
-            if (ongoingData.length === 0) {
-                // Display the 'No shipments found' message
+            if (!ongoingData || ongoingData.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
                         <td colspan="7" class="text-center text-muted py-3">
@@ -273,42 +261,80 @@ function updateOngoingShipments() {
                 return;
             }
 
-        // 3. Re-render the rows with fresh data
-        ongoingData.forEach(shipment => {
-        const statusClass = shipment.status === "In Transit" ? 'bg-info text-dark' : 'bg-success';
-        // --- CRITICAL FIX 2: Add a check for temperature ---
-        const displayTemperature = shipment.temperature || 'N/A';
-    
-        const newRow = `
-            <tr>
-                <td class="fw-medium">#${shipment.contract_id}</td>
-                <td>${shipment.product_name}</td>
-                <td>${displayTemperature}</td> 
-                <td>
-                    <span class="badge ${statusClass}">${shipment.status}</span>
-                </td>
-                <td>${shipment.buyer_name || '—'}</td>  <td>${shipment.seller_name || '—'}</td> <td>
-                    <button class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-eye"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-        tableBody.insertAdjacentHTML('beforeend', newRow);
-        });
-    })
-    .catch(error => {
-        console.error('Error fetching ongoing shipment data:', error);
-    });
+            ongoingData.forEach(shipment => {
+                const statusBadge = shipment.status === "In Transit"
+                    ? `<span class="badge bg-info text-dark px-3 py-2 rounded-pill">${shipment.status}</span>`
+                    : `<span class="badge bg-success px-3 py-2 rounded-pill">${shipment.status}</span>`;
+
+                const temperatureDisplay = shipment.temperature
+                    ? `<span class="fw-bold text-success">${shipment.temperature}</span>`
+                    : `<span class="badge bg-secondary px-2 py-1">No Data</span>`;
+
+                const newRow = `
+                    <tr>
+                        <td class="px-4 py-3">#${shipment.contract_id}</td>
+                        <td class="px-4 py-3 fw-bold text-dark">${shipment.product_name}</td>
+                        <td class="px-4 py-3">${temperatureDisplay}</td>
+                        <td class="px-4 py-3">${statusBadge}</td>
+                        <td class="px-4 py-3">${shipment.buyer_name || '—'}</td>
+                        <td class="px-4 py-3">${shipment.seller_name || '—'}</td>
+                        <td class="px-4 py-3">
+                            <button class="btn btn-sm btn-outline-primary view-shipment" data-id="${shipment.contract_id}">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', newRow);
+            });
+        })
+        .catch(error => console.error('Error fetching ongoing shipment data:', error));
 }
 
+// Auto-run for ongoing page
 if (window.location.pathname.includes('ongoing')) {
-    // Run the update function immediately on page load
-    updateOngoingShipments(); 
-
-    // Set the interval to run the update function every 60 seconds (60000 milliseconds)
-    setInterval(updateOngoingShipments, 10000); 
+    updateOngoingShipments();
+    setInterval(updateOngoingShipments, 10000); // 10 seconds
 }
+
+document.addEventListener('click', function(e) {
+    const button = e.target.closest('.view-shipment');
+    if (button) {
+        const id = button.dataset.id;
+
+        fetch(SHIPMENT_DETAILS_URL.replace('0', id))
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch shipment details');
+                return res.json();
+            })
+            .then(data => {
+                document.getElementById('shipmentDetails').innerHTML = `
+                    <p><strong>Shipment ID:</strong> #${data.contract_id}</p>
+                    <p><strong>Product:</strong> ${data.product_name}</p>
+                    <p><strong>Quantity:</strong> ${data.quantity}</p>
+                    <p><strong>Status:</strong> ${data.status}</p>
+                    <p><strong>Temperature:</strong> ${data.latest_temp}°C</p>
+                    <hr>
+                    <h6>Buyer Information</h6>
+                    <p><strong>Name:</strong> ${data.buyer_name}<br>
+                       <strong>Email:</strong> ${data.buyer_email}<br>
+                       <strong>Wallet:</strong> ${data.buyer_wallet}</p>
+                    <h6>Seller Information</h6>
+                    <p><strong>Name:</strong> ${data.seller_name}<br>
+                       <strong>Email:</strong> ${data.seller_email}<br>
+                       <strong>Wallet:</strong> ${data.seller_wallet}</p>
+                    <hr>
+                    <small class="text-muted">Last Recorded: ${data.recorded_at}</small>
+                `;
+
+                const modal = new bootstrap.Modal(document.getElementById('shipmentModal'));
+                modal.show();
+            })
+            .catch(err => console.error(err));
+    }
+});
+
+
 
 // Auto-refresh alerts section every minute
 setInterval(() => {

@@ -3,6 +3,10 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.utils import timezone
+
+import geopy
+import requests
+
 from .forms import RegistrationForm
 from .models import CustomUser
 
@@ -35,7 +39,15 @@ def login_view(request):
             login(request, user)  # Django built-in login
 
             messages.success(request, f"✅ Welcome back, {user.full_name}!")
-            return redirect("overview")  # redirect based on your project
+            if user.role == "Admin":
+                return redirect("admin_dashboard")
+            elif user.role == "Seller":
+                return redirect("overview")  # Change to your actual seller view
+            elif user.role == "Buyer":
+                return redirect("overview")  # Your main buyer page
+            else:
+                return redirect("overview")
+            # return redirect("overview")  # redirect based on your project
         else:
             messages.error(request, "❌ Invalid email or password.")
             return redirect("login")
@@ -49,6 +61,7 @@ def register_view(request):
     if request.method == "POST":
         form = RegistrationForm(request.POST, request.FILES)
         if form.is_valid():
+            address = form.cleaned_data.get('address')
             user = CustomUser.objects.create_user(
                 email=form.cleaned_data['email'],
                 full_name=form.cleaned_data['full_name'],
@@ -57,6 +70,16 @@ def register_view(request):
             # user.role = form.cleaned_data.get('role', 'buyer')
             user.m_address = form.cleaned_data.get('m_address')
             user.organization = form.cleaned_data.get('organization')
+            user.address = address
+
+            url = f"https://photon.komoot.io/api/?q={address}"
+            response = requests.get(url).json()
+
+            if response["features"]:
+                coords = response["features"][0]["geometry"]["coordinates"]
+                user.longitude = coords[0]
+                user.latitude = coords[1]
+                
             user.is_active = True
             user.is_approved = False  # ⛔ requires admin approval
             uploaded_file = request.FILES.get('business_license')

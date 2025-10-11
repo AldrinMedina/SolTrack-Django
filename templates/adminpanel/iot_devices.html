@@ -1,0 +1,147 @@
+{% extends 'adminpanel/base_admin.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">IoT Devices Management</h2>
+            <p class="text-muted">Monitor, register, and manage Soltrack IoT sensors</p>
+        </div>
+    </div>
+
+    <!-- Alerts for feedback -->
+    {% if messages %}
+    <div>
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-3">
+                <h5 class="fw-bold text-dark">Registered Devices</h5>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#registerDeviceModal">
+                    <i class="bi bi-plus-circle"></i> Register New Device
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Device Name</th>
+                            <th>Adafruit Feed</th>
+                            <th>Linked Contract</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in devices %}
+                        <tr>
+                            <td>{{ device.device_id }}</td>
+                            <td>{{ device.device_name }}</td>
+                            <td>{{ device.adafruit_feed }}</td>
+                            <td>
+                                {% if device.contract %}
+                                    #{{ device.contract.contract_id }} - {{ device.contract.product_name }}
+                                {% else %}
+                                    <span class="text-muted">Unlinked</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if device.status == "Active" %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ device.created_at|date:"M d, Y" }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-warning" onclick="toggleDeviceStatus({{ device.device_id }})">
+                                        <i class="bi bi-power"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteDevice({{ device.device_id }})">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-center text-muted py-3">No devices registered yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Register Device Modal -->
+<div class="modal fade" id="registerDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-dark">Register New Device</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Device Name</label>
+                        <input type="text" name="device_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Adafruit Feed</label>
+                        <input type="text" name="adafruit_feed" class="form-control" placeholder="e.g., user/feeds/temperature-sensor" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Link to Contract (Optional)</label>
+                        <select name="contract_id" class="form-select">
+                            <option value="">— None —</option>
+                            {% for contract in contracts %}
+                            <option value="{{ contract.contract_id }}">#{{ contract.contract_id }} - {{ contract.product_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Register Device</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleDeviceStatus(deviceId) {
+    fetch(`/adminpanel/toggle_device/${deviceId}/`, {
+        method: "POST",
+        headers: {"X-CSRFToken": "{{ csrf_token }}"}
+    }).then(res => res.json()).then(data => {
+        if (data.success) location.reload();
+    });
+}
+
+function deleteDevice(deviceId) {
+    if (confirm("Are you sure you want to remove this device?")) {
+        fetch(`/adminpanel/delete_device/${deviceId}/`, {
+            method: "POST",
+            headers: {"X-CSRFToken": "{{ csrf_token }}"}
+        }).then(res => res.json()).then(data => {
+            if (data.success) location.reload();
+        });
+    }
+}
+</script>
+{% endblock %}

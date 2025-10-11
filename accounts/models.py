@@ -34,7 +34,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     m_address = models.CharField(max_length=100, blank=True, null=True)
     organization = models.CharField(max_length=100, blank=True, null=True)
+    address = models.CharField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
+    longitude = models.FloatField(blank=True, null=True)
+    latitude = models.FloatField(blank=True, null=True)
 
     business_license = models.BinaryField(blank=True, null=True)
 

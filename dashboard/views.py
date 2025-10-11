@@ -78,8 +78,8 @@ TEMP_THRESHOLD = 20.0 	# Example threshold value (°C) - Kept from alpha.py for 
 THRESHOLD_DURATION = 300 	# 5 minutes in seconds (5 * 60)
 
 
-ADAFRUIT_IO_USERNAME = ''
-ADAFRUIT_IO_KEY = ''
+ADAFRUIT_IO_USERNAME = os.getenv("ADAFRUIT_IO_USERNAME")
+ADAFRUIT_IO_KEY = os.getenv("ADAFRUIT_IO_KEY")
 
 aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
 
@@ -215,8 +215,9 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     new_contract = Contract.objects.create(
     contract_id=next_contract_id,
     # PASS THE FULL STRING ADDRESSES DIRECTLY:
-    buyer_address="0x13994f68615c9c578745339188cc165f4ef9959c",   # <-- CORRECT
-    seller_address="0x1A947d2CfcF6a4EF915a4049077BfE9acc7Ddb0D", # <-- CORRECT 
+    
+    buyer_address=BuyerAddress,   # <-- CORRECT
+    seller_address=SellerAddress, # <-- CORRECT 
     
     product_name=ProductName,
     quantity=Quantity, 
@@ -748,9 +749,9 @@ def create_contract_view(request):
             # buyer_address = request.POST.get('buyer_address')
             buyer = CustomUser.objects.get(user_id=buyer_id)
             seller = CustomUser.objects.get(user_id=seller_id)
-            buyer_address = "0x13994f68615c9c578745339188cc165f4ef9959c"
+            buyer_address = buyer.m_address
             # seller_address = request.POST.get('seller_address')
-            seller_address = "0x1A947d2CfcF6a4EF915a4049077BfE9acc7Ddb0D"
+            seller_address = seller.m_address
             product_name = request.POST.get('product_name')
             
             # Convert to correct types
@@ -883,7 +884,7 @@ def product_manager_view(request):
         return redirect("overview")
 
     products = Product.objects.filter(seller=request.user).order_by("-created_at")
-    return render(request, "dashboard/product_manager.html", {"products": products})
+    return render(request, "dashboard/products/product_manager.html", {"products": products})
 
 
 @login_required(login_url='login')
@@ -902,7 +903,7 @@ def product_create_view(request):
             return redirect("product_manager")
     else:
         form = ProductForm()
-    return render(request, "dashboard/product_form.html", {"form": form, "title": "Add Product"})
+    return render(request, "dashboard/products/product_form.html", {"form": form, "title": "Add Product"})
 
 
 @login_required(login_url='login')
@@ -916,7 +917,7 @@ def product_edit_view(request, pk):
             return redirect("product_manager")
     else:
         form = ProductForm(instance=product)
-    return render(request, "dashboard/product_form.html", {"form": form, "title": "Edit Product"})
+    return render(request, "dashboard/products/product_form.html", {"form": form, "title": "Edit Product"})
 
 
 @login_required(login_url='login')
@@ -927,10 +928,6 @@ def product_delete_view(request, pk):
     return redirect("product_manager")
     
     
-    
-    
-    
-@login_required(login_url='login')
 @login_required(login_url='login')
 def ongoing_view(request):
     user = request.user
@@ -1013,6 +1010,48 @@ def ongoing_data_json(request):
         })
 
     return JsonResponse({"ongoing_data": ongoing_data_list})
+
+@login_required(login_url='login')
+def shipment_details_view(request, contract_id):
+    """
+    Returns JSON details about a specific shipment (contract) for the modal.
+    """
+    try:
+        contract = Contract.objects.select_related('buyer', 'seller').get(contract_id=contract_id)
+    except Contract.DoesNotExist:
+        raise Http404("Shipment not found")
+
+    # 🧠 Get latest IoT data linked to this contract
+    device = IoTDevice.objects.filter(contract_id=contract_id).first()
+    latest_iot = IoTData.objects.filter(device_id=device.device_id).order_by('-recorded_at').first()
+
+    # ✅ Structure data for JSON response
+    data = {
+        "contract_id": contract.contract_id,
+        "product_name": contract.product_name,
+        "quantity": contract.quantity,
+        "price": float(contract.price) if contract.price else None,
+        "status": contract.status,
+        "contract_address": contract.contract_address,
+        "deployment_date": contract.start_date.strftime("%Y-%m-%d %H:%M:%S") if contract.start_date else "N/A",
+
+        # 🧾 Parties
+        "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else contract.buyer.username,
+        "buyer_email": contract.buyer.email,
+        "buyer_wallet": getattr(contract.buyer, 'm_address', 'N/A'),
+        "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else contract.seller.username,
+        "seller_email": contract.seller.email,
+        "seller_wallet": getattr(contract.seller, 'm_address', 'N/A'),
+
+        # 🌡 IoT Data Summary
+        "latest_temp": latest_iot.temperature if latest_iot else "N/A",
+        # "min_temp": latest_iot.min_temp if latest_iot else "N/A",
+        # "max_temp": latest_iot.max_temp if latest_iot else "N/A",
+        "battery_voltage": latest_iot.battery_voltage if latest_iot else "N/A",
+        "recorded_at": latest_iot.recorded_at.strftime("%Y-%m-%d %H:%M:%S") if latest_iot else "N/A",
+    }
+
+    return JsonResponse(data)
 
 @login_required(login_url='login')
 def completed_view(request):

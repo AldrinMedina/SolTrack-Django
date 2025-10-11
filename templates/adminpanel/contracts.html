@@ -1,0 +1,126 @@
+{% extends 'adminpanel/base_admin.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">Contracts Management</h2>
+            <p class="text-muted">Monitor all contracts in the Soltrack system</p>
+        </div>
+        <!-- <a href="#" class="btn btn-primary rounded-3 shadow-sm">
+            <i class="bi bi-plus-circle me-2"></i> New Contract
+        </a> -->
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Contract ID</th>
+                            <th>Product</th>
+                            <th>Buyer</th>
+                            <th>Seller</th>
+                            <th>Status</th>
+                            <th>Contract Address</th>
+                            <th>Date Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contract in contracts %}
+                        <tr>
+                            <td><span class="fw-medium">#{{ contract.contract_id }}</span></td>
+                            <td>{{ contract.product_name }}</td>
+                            <td>{{ contract.buyer.full_name }}</td>
+                            <td>{{ contract.seller.full_name }}</td>
+                            <td>
+                                {% if contract.status == "Completed" %}
+                                    <span class="badge bg-success">{{ contract.status }}</span>
+                                {% elif contract.status == "Ongoing" or contract.status == "In Transit" %}
+                                    <span class="badge bg-info text-dark">{{ contract.status }}</span>
+                                {% elif contract.status == "Disputed" %}
+                                    <span class="badge bg-danger">{{ contract.status }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ contract.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if contract.contract_address %}
+                                    <code class="small text-muted">{{ contract.contract_address|truncatechars:10 }}</code>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ contract.start_date|date:"M d, Y" }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#viewContractModal{{ contract.id }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete({{ contract.id }})">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- View Modal -->
+                        <div class="modal fade" id="viewContractModal{{ contract.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title fw-bold">Contract Details</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Product:</strong> {{ contract.product_name }}</p>
+                                                <p><strong>Buyer:</strong> {{ contract.buyer.full_name }}</p>
+                                                <p><strong>Seller:</strong> {{ contract.seller.full_name }}</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>Status:</strong> {{ contract.status }}</p>
+                                                <p><strong>Blockchain Address:</strong> {{ contract.contract_address|default:"N/A" }}</p>
+                                                
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-3">No contracts found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(contractId) {
+    if (confirm("Are you sure you want to delete this contract?")) {
+        fetch(`/adminpanel/delete_contract/${contractId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) location.reload();
+        });
+    }
+}
+</script>
+{% endblock %}

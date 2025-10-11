@@ -2,5 +2,7 @@
 {% block content %}{% endblock %}
 <script>
     const DASHBOARD_DATA_URL = "{% url 'dashboard_data' %}";
+    const ONGOING_DATA_URL = "{% url 'ongoing_data_json' %}";
+    const SHIPMENT_DETAILS_URL = "{% url 'shipment_details' contract_id=0 %}";
 </script>
 {% include 'includes/footer.html' %}

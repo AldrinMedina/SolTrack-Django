@@ -56,6 +56,7 @@ INSTALLED_APPS = [
 
     'accounts',
     'dashboard',
+    'adminpanel'
 ]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'

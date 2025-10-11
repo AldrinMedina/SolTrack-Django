@@ -23,4 +23,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('accounts.urls')),       # main landing and auth
     path('dashboard/', include('dashboard.urls')),  # dashboard for logged-in users
+    path('adminpanel/', include('adminpanel.urls')),  # admin panel for site admins
 ]
