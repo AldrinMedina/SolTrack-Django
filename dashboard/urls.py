@@ -23,6 +23,7 @@ urlpatterns = [
     path("products/add/", views.product_create_view, name="product_add"),
     path("products/edit/<int:pk>/", views.product_edit_view, name="product_edit"),
     path("products/delete/<int:pk>/", views.product_delete_view, name="product_delete"),
+    path('contract/activate/<int:contract_id>/', views.activate_contract, name='activate_contract'),
 
 
 ]

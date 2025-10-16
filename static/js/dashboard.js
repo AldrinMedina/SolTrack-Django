@@ -169,6 +169,28 @@ document.addEventListener('click', function(e) {
     }
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+    const productRadios = document.querySelectorAll('input[name="selected_product"]');
+    const productNameInput = document.getElementById('product_name');
+    const quantityInput = document.getElementById('quantity');
+    const priceInput = document.getElementById('payment_amount');
+    const sellerIdInput = document.getElementById('seller_id');
+
+    productRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const name = this.getAttribute('data-name');
+            const qty = this.getAttribute('data-quantity');
+            const price = this.getAttribute('data-price');
+            const sellerId = this.getAttribute('data-seller');
+
+            productNameInput.value = name;
+            quantityInput.value = qty;
+            priceInput.value = price;
+            sellerIdInput.value = sellerId;
+        });
+    });
+});
+
 // Notification system
 // function showNotification(message, type = 'info') {
 //     const notification = document.createElement('div');

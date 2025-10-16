@@ -80,6 +80,7 @@ THRESHOLD_DURATION = 300 	# 5 minutes in seconds (5 * 60)
 ADAFRUIT_IO_USERNAME = os.getenv("ADAFRUIT_IO_USERNAME")
 ADAFRUIT_IO_KEY = os.getenv("ADAFRUIT_IO_KEY")
 
+
 aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
 
 FIXED_ESCROW_FEE_ETH = 0.01 
@@ -90,7 +91,7 @@ def activate_contract(request, contract_id):
     Handles contract activation:
     1. Calculates total ETH: FIXED_ESCROW_FEE_ETH (0.01) + contract_db.price.
     2. Sends the total amount from the LOGGED-IN USER'S m_address to the DEPLOYER_ADDRESS (escrow).
-    3. Sets the Seller's m_address location as start_coords.
+    3. Sets the Seller's m_address location as start_coord.
     4. Updates the contract status to 'Ongoing'.
     """
     
@@ -101,13 +102,14 @@ def activate_contract(request, contract_id):
         # --- 1. Retrieve Contract Data and Coords ---
         contract_db = Contract.objects.get(contract_id=contract_id)
         
-        sender_address = request.user.m_address 
+        # sender_address = request.user.m_address
+        sender_address = DEPLOYER_ADDRESS # TEMPORARY: Use deployer for testing 
         escrow_address = DEPLOYER_ADDRESS 
 
         # --- NEW: Get Seller's coordinates from POST data (Start Coords) ---
         seller_lat = request.POST.get('client_lat')
         seller_lon = request.POST.get('client_lon')
-        start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
+        start_coord_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
         
         # --- 2. Web3 Setup and Amount Calculation ---
         if not web3.is_connected():
@@ -134,7 +136,7 @@ def activate_contract(request, contract_id):
             'nonce': nonce,
             'value': amount_to_send_wei,
             'gasPrice': web3.eth.gas_price, 
-            'gas':  21000 
+            'gas':  65394 
         }
         
         # --- 4. Sign and Send Transaction ---
@@ -150,7 +152,7 @@ def activate_contract(request, contract_id):
         # --- 5. Update Database Status and Coords ---
         contract_db.status = 'Ongoing'
         contract_db.start_date = timezone.now()
-        contract_db.start_coords = start_coords_str # Set Seller's location as start
+        contract_db.start_coord = start_coord_str # Set Seller's location as start
         contract_db.save()
         print(f"[{timezone.now()}] DATABASE UPDATE: Contract ID {contract_id} status updated to Ongoing.")
         
@@ -183,8 +185,8 @@ def _check_delivery_status(contract_db):
     
     # 1. Parse Coords (Check for missing data)
     try:
-        s_lat, s_lon = map(float, contract_db.start_coords.split(','))
-        e_lat, e_lon = map(float, contract_db.end_coords.split(','))
+        s_lat, s_lon = map(float, contract_db.start_coord.split(','))
+        e_lat, e_lon = map(float, contract_db.end_coord.split(','))
     except (AttributeError, ValueError):
         return 0.0, "Coords Missing"
         
@@ -266,14 +268,18 @@ def _get_current_temp(threshold_float):
     current_temp_mock = IoTData.objects.latest('recorded_at').temperature
     return f"{current_temp_mock:.1f}°C", current_temp_mock
 
-def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity, EndCoords):
+def deploy_contract_and_save(BuyerId, SellerId, ProductName, PaymentAmount, Quantity, EndCoords):
     """
     Compiles, signs, and sends the deployment and initial Refund transactions 
     to the Sepolia testnet, then saves contract details using the Django ORM.
     """
     
     print("--- Starting Contract Deployment Process ---")
-    
+    buyer = CustomUser.objects.get(user_id=BuyerId)
+    seller = CustomUser.objects.get(user_id=SellerId)
+
+    BuyerAddress = buyer.m_address
+    SellerAddress = seller.m_address
     # 1. Check Web3 Connection
     if not web3.is_connected():
         print("ERROR: Web3 not connected. Check RPC URL and network status.")
@@ -359,7 +365,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     next_contract_id = (latest_iot_contract or 0) + 1
     print(f"10. Saving contract details to database (Attempting ID: {next_contract_id}).")
     user = CustomUser.objects.get(m_address=BuyerAddress)
-    EndCoords = f"{user.latitude},{user.longitude}" # FORMAT: "lat lon"
+    EndCoords = f"13.94469805,121.11939810046354" # FORMAT: "lat lon"
     new_contract = Contract.objects.create(
     contract_id=next_contract_id,
     
@@ -378,9 +384,11 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
     contract_address=contract_address,      
     contract_abi=abi,           # JSONField automatically handles the Python object 'abi'
     
-    max_temp=5.0, 
+    max_temp=25.0, 
     status='Active',
-    end_coords=EndCoords, # Set Buyer's location as destination
+    end_coord="13.94469805,121.11939810046354", # Set Buyer's location as destination
+    buyer_id=BuyerId,
+    seller_id=SellerId,
     
     )
     print("11. Database save complete. Process SUCCESSFUL.")
@@ -839,63 +847,49 @@ def overview_view(request):
 
 
 def active_view(request):
-    
-    # --- Live Data Fetch from Supabase via Django ORM ---
     try:
         contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit']).all()
+        products = Product.objects.all()
     except Exception as e:
         print(f"Database query error: {e}")
-        contracts_queryset = []
+        contracts_queryset, products = [], []
 
     active_contracts = []
-    
     for contract_instance in contracts_queryset:
-        
-        # 1. Get the temperature threshold (now a FloatField from the DB)
         temp_threshold_float = contract_instance.max_temp
-        
-        # 2. Get/Mock the current temperature
         current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float)
-        
-        # 3. Determine status
-        if contract_instance.status == 'Ongoing':
-            status = 'Ongoing'
-            status_class = 'info'
-        elif contract_instance.status == 'In Transit':
-            status = 'In Transit'
-            status_class = 'warning'
-        else:
-            status = 'Active'
-            status_class = 'success'
-        
-        if current_temp_float > temp_threshold_float:
-            status = 'Alert' 
-            status_class = 'warning'
-        
-        # 4. Assemble final data object
+        status = 'Alert' if current_temp_float > temp_threshold_float else contract_instance.status
+        status_class = 'warning' if current_temp_float > temp_threshold_float else 'success'
+
         active_contracts.append({
-            'contract': contract_instance,
-            
-            'buyer_name': contract_instance.buyer.full_name if contract_instance.buyer else "N/A",
-            'seller_name': contract_instance.seller.full_name if contract_instance.seller else "N/A",
-   
-            'current_temp': current_temp_str, 
+            'contract_id': contract_instance.contract_id,
+            'product_name': contract_instance.product_name,
+            'buyer': contract_instance.buyer,
+            'seller': contract_instance.seller,
+            'contract_address': contract_instance.contract_address,
+            'quantity': contract_instance.quantity,
+            'price': contract_instance.price,
             'status': status,
             'status_class': status_class,
+            'current_temp': current_temp_str,
         })
     
+    user_role = getattr(request.user, 'role', 'Buyer')
+
     context = {
-        'contracts': active_contracts
+        'contracts': active_contracts,
+        'products': products,
+        'user_role': user_role,
+        'role': user_role,
     }
-    
     return render(request, 'dashboard/active.html', context)
 
 def create_contract_view(request):
     if request.method == 'POST':
         try:
             
-            seller_id = int(request.POST.get('seller_id'))
-            buyer_id = int(request.POST.get('buyer_id'))
+            seller_id = request.POST.get('seller_id')
+            buyer_id = request.POST.get('buyer_id')
             # 1. Get ALL required data from the POST request
             # buyer_address = request.POST.get('buyer_address')
             buyer = CustomUser.objects.get(user_id=buyer_id)
@@ -907,14 +901,14 @@ def create_contract_view(request):
             
             # Convert to correct types
             payment_amount = float(request.POST.get('payment_amount'))
-            quantity = int(request.POST.get('quantity')) 
+            quantity = request.POST.get('quantity')
             buyer_lat = request.POST.get('client_lat') 
             buyer_lon = request.POST.get('client_lon')
             end_coords_str = f"{buyer_lat},{buyer_lon}" if buyer_lat and buyer_lon else None
             # 2. Execute the deployment and database saving logic
             contract_address = deploy_contract_and_save(
-                buyer_address, 
-                seller_address, 
+                buyer_id, 
+                seller_id, 
                 product_name, 
                 payment_amount,
                 quantity,
@@ -1105,7 +1099,8 @@ def ongoing_view(request):
         # FIX 2: Use the live_temp_str instead of the DB query
         
         # Determine temperature display (use "N/A" if the fetch failed)
-        current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
+        # current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
+        current_temp_display = IoTData.objects.filter(device_id=1).order_by('-recorded_at').first()
 
 
         ongoing_data.append({

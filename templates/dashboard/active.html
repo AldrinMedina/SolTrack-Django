@@ -8,7 +8,7 @@
             <h2 class="fw-bold text-white mb-2">Active Contracts</h2>
             <p class="text-white opacity-75">Contracts deployed and awaiting activation.</p>
         </div>
-        {% if role == 'buyer' %}
+        {% if role == 'Buyer' %}
         <div>
            <button 
             type="button" 
@@ -45,6 +45,7 @@
                             <td class="px-4 py-2">
                                 <span class="badge bg-warning text-dark">{{ contract.status }}</span>
                             </td>
+                            <td class="px-4 py-2">{{ contract.product_name }}</td>
                             <td class="px-4 py-2">{{ contract.buyer.full_name }}</td>
                             <td class="px-4 py-2">{{ contract.seller.full_name }}</td>
                             <td class="px-4 py-2 text-truncate" style="max-width: 150px;">
@@ -55,7 +56,7 @@
                             
                             <!-- ACTIONS COLUMN -->
                             <td class="px-4 py-2 text-center">
-                                {% if user_role == 'seller' and contract.status == 'Active' %}
+                                {% if role == 'Seller' and contract.status == 'Active' %}
                                     <!-- Activation form -->
                                     <form method="POST" action="{% url 'activate_contract' contract.contract_id %}" class="d-inline">
                                         {% csrf_token %}
@@ -101,49 +102,58 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted">Enter shipment and payment details. A contract will be deployed to Sepolia.</p>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-dark mb-3">Buyer Information</h6>
-                            <div class="mb-3">
-                                <label for="buyer_name" class="form-label">Buyer Name</label>
-                                <input type="text" class="form-control" id="buyer_name" name="buyer_name" placeholder="Enter buyer name" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="buyer_id" class="form-label">Buyer Address</label>
-                                <input type="text" class="form-control" id="buyer_id" name="buyer_id" placeholder="0x..." required>
-                            </div>
-                            
-                            <h6 class="fw-bold text-dark mb-3 mt-4">Seller Information</h6>
-                            <div class="mb-3">
-                                <label for="seller_name" class="form-label">Seller Name</label>
-                                <input type="text" class="form-control" id="seller_name" name="seller_name" placeholder="Enter seller name" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="seller_id" class="form-label">Seller Address</label>
-                                <input type="text" class="form-control" id="seller_id" name="seller_id" placeholder="0x..." required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-dark mb-3">Contract Terms</h6>
-                            <div class="mb-3">
-                                <label for="vaccine_select" class="form-label">Select Product Name</label>
-                                <select class="form-select" id="vaccine_select" name="product_name" required>
-                                    <option value="Pfizer-BioNTech" selected>Pfizer-BioNTech</option>
-                                    <option value="Moderna">Moderna</option>
-                                    <option value="AstraZeneca">AstraZeneca</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="quantity" class="form-label">Quantity (Units)</label>
-                                <input type="number" class="form-control" id="quantity" name="quantity" value="100" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="payment_amount" class="form-label">Price / Payment Amount (ETH)</label>
-                                <input type="number" class="form-control" id="payment_amount" name="payment_amount" value="20.00" step="0.01" required>
-                                <small class="text-muted">Will be held in escrow.</small>
-                            </div>
-                        </div>
+                    <!-- Product Selection Table -->
+                    <h6 class="fw-bold text-dark mb-3">Select Product</h6>
+                    <div class="table-responsive mb-3" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-bordered table-hover align-middle" id="productTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Select</th>
+                                    <th>Product Name</th>
+                                    <th>Available Quantity</th>
+                                    <th>Price (ETH)</th>
+                                    <th>Max Temp (°C)</th>
+
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in products %}
+                                <tr>
+                                    <td>
+                                        <input type="radio" name="selected_product" 
+                                            value="{{ product.product_id }}"
+                                            data-seller="{{product.seller_id}}"
+                                            data-name="{{ product.product_name }}"
+                                            data-quantity="{{ product.quantity_available }}"
+                                            data-price="{{ product.price_eth }}"
+                                            data-maxtemp="{{ product.max_temp }}">
+                                    </td>
+                                    <td>{{ product.product_name }}</td>
+                                    <td>{{ product.quantity_available }}</td>
+                                    <td>{{ product.price_eth }}</td>
+                                    <td>{{ product.max_temp }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No products available.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Hidden field for selected product -->
+                    <input type="hidden" id="buyer_id" name="buyer_id" value="{{ request.user.user_id }}">
+                    <input type="hidden" id="seller_id" name="seller_id">
+                    <input type="hidden" id="product_name" name="product_name">
+
+                    <div class="mb-3">
+                        <label for="quantity" class="form-label">Quantity (Units)</label>
+                        <input type="number" class="form-control" id="quantity" name="quantity" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="payment_amount" class="form-label">Price / Payment Amount (ETH)</label>
+                        <input type="number" class="form-control" id="payment_amount" name="payment_amount" step="0.01" required>
                     </div>
                 </div>
 
