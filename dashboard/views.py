@@ -4,8 +4,9 @@ from django.contrib import messages
 from django.utils import timezone 
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.db import models
-from django.db.models import Avg, Min, Max
+from django.db import models, connection
+from django.db.models import Avg, Min, Max, Count, Q, OuterRef, Subquery, F
+from django.core.cache import cache
 from django.http import HttpResponse, Http404, JsonResponse
 
 from reportlab.lib import colors
@@ -31,11 +32,12 @@ from dotenv import load_dotenv # NEW
 from eth_account import Account # NEW
 from accounts.models import CustomUser
 from web3.exceptions import ContractLogicError
-load_dotenv() 
 from Adafruit_IO import Client 
 from Adafruit_IO import RequestError
 
 import math
+load_dotenv() 
+
 
 SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL")
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
@@ -167,6 +169,23 @@ def activate_contract(request, contract_id):
 DELIVERY_THRESHOLD_KM = 0.010 # Distance threshold to mark destination reached
 DELIVERY_COOLDOWN_SECONDS = 180 # 3 minutes (3 * 60)
 
+def latest_iot_rows_for_devices(device_ids):
+    if not device_ids:
+        return {}
+    # Use DISTINCT ON to get latest row per device (Postgres)
+    device_ids_list = ','.join(str(int(d)) for d in device_ids)
+    sql = f"""
+    SELECT DISTINCT ON (device_id) device_id, data_id, temperature, battery_voltage, gps_lat, gps_long, recorded_at
+    FROM iot_data
+    WHERE device_id IN ({device_ids_list})
+    ORDER BY device_id, recorded_at DESC
+    """
+    with connection.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+    # map by device_id
+    return {r[0]: {'data_id': r[1], 'temperature': r[2], 'battery_voltage': r[3], 'gps_lat': r[4], 'gps_long': r[5], 'recorded_at': r[6]} for r in rows}
+
 def haversine(lat1, lon1, lat2, lon2):
     """Calculates the distance between two points on Earth in kilometers."""
     R = 6371.0 # Radius of Earth in kilometers
@@ -231,7 +250,6 @@ def _check_delivery_status(contract_db):
     # Return progress percentage and status string
     return progress_percent, f"{progress_percent:.0f}%"
 
-
 def _get_live_iot_data():
   
     if aio is None:
@@ -261,7 +279,6 @@ def _get_live_iot_data():
     
     # Return default/error values
     return -100.0, "N/A", "bg-secondary"
-
 
 def _get_current_temp(threshold_float):
     """Mocks a live temperature reading based on the threshold."""
@@ -397,49 +414,73 @@ def deploy_contract_and_save(BuyerId, SellerId, ProductName, PaymentAmount, Quan
     return contract_address
 
 def dashboard_data(request):
+    """Return optimized dashboard metrics as JSON."""
+
     user = request.user
     user_role = request.session.get("user_role", "").lower()
     user_id = request.session.get("user_id")
-    # Filter contracts based on user role
-    if user_role.lower() == "buyer":
-        contracts = Contract.objects.filter(buyer_id=user_id)
-    elif user_role.lower() == "seller":
-        contracts = Contract.objects.filter(seller_id=user_id)
-    else:
-        contracts = Contract.objects.all()
 
-    # Contract stats
-    total_contracts = contracts.count()
-    active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
-    ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
-    completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+    # --- CACHE LAYER (30 seconds to reduce load) ---
+    cache_key = f"dashboard_stats_{user_role}_{user_id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached)
 
-    # 🌡️ IoT Data (real-time readings)
-    devices = IoTDevice.objects.filter(contract__in=contracts)
-    iot_data = IoTData.objects.filter(device__in=devices)
+    # --- Base Query ---
+    base_filter = {}
+    if user_role == "buyer":
+        base_filter["buyer_id"] = user_id
+    elif user_role == "seller":
+        base_filter["seller_id"] = user_id
 
-    avg_temp = iot_data.aggregate(avg=Avg("temperature"))["avg"] or 0
-    total_records = iot_data.count()
+    # Preload buyer/seller to prevent extra queries
+    contracts = (
+        Contract.objects.filter(**base_filter)
+        .select_related("buyer", "seller")
+        .defer("contract_abi")  # avoid loading large JSON field
+    )
 
-    # Optional: define “Normal” temperature range (e.g., 2°C to 8°C)
-    normal_records = iot_data.filter(temperature__range=(2, 8)).count()
-    success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
+    # --- Contract Stats (1 aggregate query instead of 4 counts) ---
+    stats = contracts.aggregate(
+        total=Count("contract_id"),
+        active=Count("contract_id", filter=Q(status__in=["Active", "Ongoing", "In Transit"])),
+        ongoing=Count("contract_id", filter=Q(status__in=["In Transit", "Ongoing"])),
+        completed=Count("contract_id", filter=Q(status__in=["Completed", "Delivered"]))
+    )
+    total_contracts = stats.get("total", 0)
+    active_contracts = stats.get("active", 0)
+    ongoing_contracts = stats.get("ongoing", 0)
+    completed_contracts = stats.get("completed", 0)
 
-    # 🚨 Alerts
-    active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
+    # --- IoT and Alerts Stats ---
+    avg_temp = (
+        IoTDataHistory.objects.filter(contract__in=contracts)
+        .aggregate(avg=Avg("avg_temp"))
+        .get("avg") or 0
+    )
+
+    total_records = IoTDataHistory.objects.filter(contract__in=contracts).count()
+    normal_records = IoTDataHistory.objects.filter(contract__in=contracts, result="Normal").count()
+    success_rate = round((normal_records / total_records) * 100, 1) if total_records else 0
+
+    active_alerts = Alert.objects.filter(
+        device__contract__in=contracts, status="Active"
+    ).count()
+
     system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
     status_color = "bg-success" if active_alerts == 0 else "bg-danger"
 
-
-    # 📈 Chart data (latest 10 readings)
-    temp_history = (
-        iot_data.order_by("-recorded_at")[:10]
-        .values_list("recorded_at", "temperature")
+    # --- Temperature History (latest 10 readings) ---
+    temp_history_qs = (
+        IoTDataHistory.objects.filter(contract__in=contracts)
+        .order_by("-recorded_at")[:10]
     )
+    temp_history = list(temp_history_qs.values_list("recorded_at", "avg_temp"))
     chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
     chart_values = [t[1] for t in reversed(temp_history)]
 
-    return JsonResponse({
+    # --- Prepare response ---
+    result = {
         "total_contracts": total_contracts,
         "active_contracts": active_contracts,
         "ongoing_contracts": ongoing_contracts,
@@ -451,7 +492,10 @@ def dashboard_data(request):
         "chart_values": chart_values,
         "system_status": system_status,
         "status_color": status_color,
-    })
+    }
+
+    cache.set(cache_key, result, 30)  # cache for 30 seconds
+    return JsonResponse(result)
 
 def download_contract_report(request, contract_id):
     # Get contract and related IoT data
@@ -779,110 +823,170 @@ def download_contract_report(request, contract_id):
     doc.build(content)
     return response
 
+# @login_required(login_url='login')
+# def overview_view(request):
+#     user = request.user  # The currently logged-in user
+
+#     # 🧠 Determine the user role (Buyer/Seller/Admin)
+#     user_role = request.session.get("user_role", "").lower()
+
+
+#     # 🧩 Filter contracts based on user role
+#     if user_role.lower() == "buyer":
+#         contracts = Contract.objects.filter(buyer=user)
+#     elif user_role.lower() == "seller":
+#         contracts = Contract.objects.filter(seller=user)
+#     else:  # Admin sees all
+#         contracts = Contract.objects.all()
+
+#     # 📊 Count stats
+#     total_contracts = contracts.count()
+#     active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
+#     completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+
+#     # --- IOT DATA METRICS ---
+#     iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
+#     avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
+
+#     total_records = iot_data.count()
+#     normal_records = iot_data.filter(result="Normal").count()
+#     success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
+
+#     # --- ALERTS ---
+#     alerts = Alert.objects.filter(device__contract__in=contracts)
+#     active_alerts = alerts.filter(status="Active")
+#     active_alert_count = active_alerts.count()
+
+#     # Active sensors (linked to active contracts)
+#     active_sensors = (
+#         IoTDevice.objects
+#         .filter(contract__in=contracts.filter(status__in=["Active","Ongoing", "In Transit"]))
+#         .select_related("contract")
+#     )
+
+#     # Recent temperature readings for chart
+#     temp_history = (
+#         iot_data.order_by("-recorded_at")[:10]  # get latest 10 readings
+#         .values_list("recorded_at", "avg_temp")
+#     )
+#     chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
+#     chart_values = [t[1] for t in reversed(temp_history)]
+
+#     context = {
+#         "user_role": user_role,
+#         "total_contracts": total_contracts,
+#         "active_contracts": active_contracts,
+#         "completed_contracts": completed_contracts,
+#         "avg_temp": round(avg_temp, 2),
+#         "success_rate": success_rate,
+#         "active_sensors": active_sensors,
+#         "active_alerts": active_alerts,
+#         "active_alert_count": active_alert_count,
+#         "chart_labels_json": json.dumps(chart_labels),
+#         "chart_values_json": json.dumps(chart_values)
+#     }
+
+#     return render(request, "dashboard/overview.html", context)
 @login_required(login_url='login')
 def overview_view(request):
-    user = request.user  # The currently logged-in user
-
-    # 🧠 Determine the user role (Buyer/Seller/Admin)
-    user_role = request.session.get("user_role", "").lower()
-
-
-    # 🧩 Filter contracts based on user role
-    if user_role.lower() == "buyer":
-        contracts = Contract.objects.filter(buyer=user)
-    elif user_role.lower() == "seller":
-        contracts = Contract.objects.filter(seller=user)
-    else:  # Admin sees all
-        contracts = Contract.objects.all()
-
-    # 📊 Count stats
-    total_contracts = contracts.count()
-    active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
-    completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
-
-    # --- IOT DATA METRICS ---
-    iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
-    avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
-
-    total_records = iot_data.count()
-    normal_records = iot_data.filter(result="Normal").count()
-    success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
-
-    # --- ALERTS ---
-    alerts = Alert.objects.filter(device__contract__in=contracts)
-    active_alerts = alerts.filter(status="Active")
-    active_alert_count = active_alerts.count()
-
-    # Active sensors (linked to active contracts)
-    active_sensors = (
-        IoTDevice.objects
-        .filter(contract__in=contracts.filter(status__in=["Active","Ongoing", "In Transit"]))
-        .select_related("contract")
-    )
-
-    # Recent temperature readings for chart
-    temp_history = (
-        iot_data.order_by("-recorded_at")[:10]  # get latest 10 readings
-        .values_list("recorded_at", "avg_temp")
-    )
-    chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
-    chart_values = [t[1] for t in reversed(temp_history)]
-
-    context = {
-        "user_role": user_role,
-        "total_contracts": total_contracts,
-        "active_contracts": active_contracts,
-        "completed_contracts": completed_contracts,
-        "avg_temp": round(avg_temp, 2),
-        "success_rate": success_rate,
-        "active_sensors": active_sensors,
-        "active_alerts": active_alerts,
-        "active_alert_count": active_alert_count,
-        "chart_labels_json": json.dumps(chart_labels),
-        "chart_values_json": json.dumps(chart_values)
-    }
-
-    return render(request, "dashboard/overview.html", context)
-
+    """
+    Main dashboard landing page after login.
+    Lightweight render; dashboard_data() provides heavy data asynchronously.
+    """
+    return render(request, "dashboard/overview.html")
 
 
 def active_view(request):
+    """
+    Optimized Active Contracts view
+    Shows all contracts with status Active, Ongoing, or In Transit
+    """
     try:
-        contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit']).all()
+        # Get user role (needed for button visibility)
+        user_role = getattr(request.user, 'role', 'Buyer')
+
+        # 1️⃣ Base queryset with related data preloaded
+        contracts_qs = (
+            Contract.objects
+            .filter(status__in=["Active", "Ongoing", "In Transit"])
+            .select_related("buyer", "seller")
+            .defer("contract_abi")
+        )
         products = Product.objects.all()
+
+        # 2️⃣ Subquery: fetch latest IoT data for each device in one pass
+        latest_data_subquery = (
+            IoTData.objects
+            .filter(device=OuterRef("pk"))
+            .order_by("-recorded_at")
+        )
+
+        # Annotate each IoTDevice with its latest temperature and timestamp
+        devices_qs = (
+            IoTDevice.objects
+            .filter(contract__in=contracts_qs)
+            .annotate(
+                latest_temp=Subquery(latest_data_subquery.values("temperature")[:1]),
+                latest_recorded_at=Subquery(latest_data_subquery.values("recorded_at")[:1])
+            )
+            .select_related("contract")
+        )
+
+        # 3️⃣ Map device -> latest temp for quick lookup
+        device_data_map = {
+            d.contract.contract_id: {
+                "temperature": d.latest_temp,
+                "recorded_at": d.latest_recorded_at,
+            }
+            for d in devices_qs
+            if d.contract
+        }
+
+        # 4️⃣ Build context data
+        active_contracts = []
+        for contract in contracts_qs:
+            device_info = device_data_map.get(contract.contract_id)
+            current_temp = device_info["temperature"] if device_info else None
+
+            # Determine temperature-based status (same logic as before)
+            if current_temp is not None:
+                if current_temp > (contract.max_temp or 0):
+                    status = "Alert"
+                    status_class = "warning"
+                else:
+                    status = contract.status
+                    status_class = "success"
+                current_temp_display = f"{current_temp:.1f}°C"
+            else:
+                status = contract.status
+                status_class = "secondary"
+                current_temp_display = "N/A"
+
+            active_contracts.append({
+                "contract_id": contract.contract_id,
+                "product_name": contract.product_name,
+                "buyer": contract.buyer,
+                "seller": contract.seller,
+                "contract_address": contract.contract_address,
+                "quantity": contract.quantity,
+                "price": contract.price,
+                "status": status,
+                "status_class": status_class,
+                "current_temp": current_temp_display,
+            })
+
     except Exception as e:
-        print(f"Database query error: {e}")
-        contracts_queryset, products = [], []
+        print(f"[Active View Error] {e}")
+        active_contracts, products, user_role = [], [], "Buyer"
 
-    active_contracts = []
-    for contract_instance in contracts_queryset:
-        temp_threshold_float = contract_instance.max_temp
-        current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float)
-        status = 'Alert' if current_temp_float > temp_threshold_float else contract_instance.status
-        status_class = 'warning' if current_temp_float > temp_threshold_float else 'success'
-
-        active_contracts.append({
-            'contract_id': contract_instance.contract_id,
-            'product_name': contract_instance.product_name,
-            'buyer': contract_instance.buyer,
-            'seller': contract_instance.seller,
-            'contract_address': contract_instance.contract_address,
-            'quantity': contract_instance.quantity,
-            'price': contract_instance.price,
-            'status': status,
-            'status_class': status_class,
-            'current_temp': current_temp_str,
-        })
-    
-    user_role = getattr(request.user, 'role', 'Buyer')
-
+    # ✅ Add back user role for button logic
     context = {
-        'contracts': active_contracts,
-        'products': products,
-        'user_role': user_role,
-        'role': user_role,
+        "contracts": active_contracts,
+        "products": products,
+        "user_role": user_role,
+        "role": user_role,
     }
-    return render(request, 'dashboard/active.html', context)
+    return render(request, "dashboard/active.html", context)
 
 def create_contract_view(request):
     if request.method == 'POST':
@@ -1079,129 +1183,240 @@ def product_delete_view(request, pk):
     
 @login_required(login_url='login')
 def ongoing_view(request):
-    user = request.user
-    user_role = request.session.get("user_role", "").lower()
-    user_id = request.session.get("user_id")
-    # 🧩 Filter contracts based on role
-    if user_role == "buyer":
-        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"], buyer_id=user_id)
-    elif user_role == "seller":
-        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"], seller_id=user_id)
-    else:  # admin
-        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+    """
+    Optimized Ongoing Contracts View
+    Displays all contracts currently in transit or ongoing shipments.
+    """
+    try:
+        # 1️⃣ Base queryset: prefetch buyer/seller to avoid multiple lookups
+        ongoing_contracts_qs = (
+            Contract.objects
+            .filter(status__in=["Ongoing", "In Transit"])
+            .select_related("buyer", "seller")
+            .defer("contract_abi")
+        )
 
-    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
-    live_temp_float, live_temp_str, _ = _get_live_iot_data()
+        # 2️⃣ Subquery to get the latest IoTData per device
+        latest_data_subquery = (
+            IoTData.objects
+            .filter(device=OuterRef("pk"))
+            .order_by("-recorded_at")
+        )
 
-    # 🌡️ Prepare ongoing shipment data
-    ongoing_data = []
-    for contract in contracts:
-        # FIX 2: Use the live_temp_str instead of the DB query
-        
-        # Determine temperature display (use "N/A" if the fetch failed)
-        # current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
-        current_temp_display = IoTData.objects.filter(device_id=1).order_by('-recorded_at').first()
+        # 3️⃣ Annotate each IoTDevice with its latest temperature and time
+        devices_qs = (
+            IoTDevice.objects
+            .filter(contract__in=ongoing_contracts_qs)
+            .annotate(
+                latest_temp=Subquery(latest_data_subquery.values("temperature")[:1]),
+                latest_recorded_at=Subquery(latest_data_subquery.values("recorded_at")[:1])
+            )
+            .select_related("contract")
+        )
 
+        # 4️⃣ Map contract_id → latest temp for fast lookup
+        device_map = {
+            device.contract.contract_id: {
+                "temperature": device.latest_temp,
+                "recorded_at": device.latest_recorded_at
+            }
+            for device in devices_qs if device.contract
+        }
 
-        ongoing_data.append({
-            "contract_id": contract.contract_id,
-            "product_name": contract.product_name,
-            # Use the live temperature string
-            "temperature": current_temp_display, 
-            "status": contract.status,
-            "min_temp": contract.min_temp,
-            "max_temp": contract.max_temp,
-            "buyer_name": contract.buyer.full_name if contract.buyer else "—",
-            "seller_name": contract.seller.full_name if contract.seller else "—",
-        })
+        # 5️⃣ Build list of ongoing contracts
+        ongoing_data = []
+        for contract in ongoing_contracts_qs:
+            device_info = device_map.get(contract.contract_id)
+            temp = device_info["temperature"] if device_info else None
+            recorded_at = device_info["recorded_at"].strftime("%Y-%m-%d %H:%M") if device_info and device_info["recorded_at"] else "N/A"
 
-    context = {
-        "ongoing_data": ongoing_data,
-        "user_role": user_role,
-    }
+            # Temperature-based color/status
+            if temp is not None:
+                if temp > (contract.max_temp or 0):
+                    temp_display = f"{temp:.1f}°C ⚠️"
+                    status_class = "warning"
+                else:
+                    temp_display = f"{temp:.1f}°C"
+                    status_class = "success"
+            else:
+                temp_display = "N/A"
+                status_class = "secondary"
 
-    return render(request, "dashboard/ongoing.html", context)
+            ongoing_data.append({
+                "contract_id": contract.contract_id,
+                "product_name": contract.product_name,
+                "temperature": temp_display,
+                "status": contract.status,
+                "status_class": status_class,
+                "buyer_name": getattr(contract.buyer, "full_name", "—"),
+                "seller_name": getattr(contract.seller, "full_name", "—"),
+                "recorded_at": recorded_at,
+            })
+
+        # 6️⃣ Handle JSON vs template request
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ongoing_data": ongoing_data})
+
+    except Exception as e:
+        print(f"[Ongoing View Error] {e}")
+        ongoing_data = []
+
+    return render(request, "dashboard/ongoing.html", {"ongoing_data": ongoing_data})
 
 
 @login_required(login_url='login')
 def ongoing_data_json(request):
-    user = request.user
-    user_role = user.role.lower()
+    """
+    Optimized JSON endpoint for Ongoing Contracts.
+    Provides fast, lightweight updates for dashboard.js via ONGOING_DATA_URL.
+    """
+    try:
+        # 1️⃣ Base queryset - preload related users, avoid large fields
+        contracts_qs = (
+            Contract.objects
+            .filter(status__in=["Ongoing", "In Transit"])
+            .select_related("buyer", "seller")
+            .defer("contract_abi")
+        )
 
-    # 1. Filter contracts based on role (already correct)
-    if user_role == "buyer":
-        contracts = Contract.objects.filter(buyer=user, status__in=["Ongoing", "In Transit"])
-    elif user_role == "seller":
-        contracts = Contract.objects.filter(seller=user, status__in=["Ongoing", "In Transit"])
-    else:  # admin
-        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+        # 2️⃣ Latest IoTData subquery for each IoTDevice
+        latest_data_subquery = (
+            IoTData.objects
+            .filter(device=OuterRef("pk"))
+            .order_by("-recorded_at")
+        )
 
-    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
-    live_temp_float, live_temp_str, _ = _get_live_iot_data()
-    
-    # 2. Determine temperature display (use "N/A" if the fetch failed)
-    temperature_display = live_temp_str if live_temp_float != -100.0 else "N/A"
-        
+        # 3️⃣ Annotate devices with latest temperature and timestamp
+        devices_qs = (
+            IoTDevice.objects
+            .filter(contract__in=contracts_qs)
+            .annotate(
+                latest_temp=Subquery(latest_data_subquery.values("temperature")[:1]),
+                latest_recorded_at=Subquery(latest_data_subquery.values("recorded_at")[:1]),
+            )
+            .select_related("contract")
+        )
 
-    # 3. Build the JSON response data
-    ongoing_data_list = []
-    
-    for contract in contracts:
-        ongoing_data_list.append({
-            "contract_id": contract.contract_id,
-            "product_name": contract.product_name,
-            # CRITICAL FIX: Use the live temperature string from Adafruit IO
-            "temperature": temperature_display, 
-            "status": contract.status,
-            "min_temp": contract.min_temp,
-            "max_temp": contract.max_temp,
-            "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else "—",
-            "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else "—",
-        })
+        # 4️⃣ Build lookup map
+        device_map = {
+            device.contract.contract_id: {
+                "temperature": device.latest_temp,
+                "recorded_at": (
+                    device.latest_recorded_at.strftime("%Y-%m-%d %H:%M:%S")
+                    if device.latest_recorded_at else None
+                )
+            }
+            for device in devices_qs if device.contract
+        }
 
-    return JsonResponse({"ongoing_data": ongoing_data_list})
+        # 5️⃣ Build compact JSON data
+        ongoing_data = []
+        for contract in contracts_qs:
+            device_info = device_map.get(contract.contract_id)
+            temp = device_info["temperature"] if device_info else None
+
+            # Determine display and status
+            if temp is not None:
+                if temp > (contract.max_temp or 0):
+                    temp_display = f"{temp:.1f}°C ⚠️"
+                    status_class = "warning"
+                else:
+                    temp_display = f"{temp:.1f}°C"
+                    status_class = "success"
+            else:
+                temp_display = "N/A"
+                status_class = "secondary"
+
+            ongoing_data.append({
+                "contract_id": contract.contract_id,
+                "product_name": contract.product_name,
+                "temperature": temp_display,
+                "status": contract.status,
+                "status_class": status_class,
+                "buyer_name": getattr(contract.buyer, "full_name", "—"),
+                "seller_name": getattr(contract.seller, "full_name", "—"),
+                "recorded_at": device_info["recorded_at"] if device_info else "N/A",
+            })
+
+        return JsonResponse({"ongoing_data": ongoing_data}, safe=False)
+
+    except Exception as e:
+        print(f"[Ongoing Data JSON Error] {e}")
+        return JsonResponse({"ongoing_data": []}, safe=False)
 
 @login_required(login_url='login')
 def shipment_details_view(request, contract_id):
     """
-    Returns JSON details about a specific shipment (contract) for the modal.
+    Optimized endpoint for SHIPMENT_DETAILS_URL
+    Returns a single contract’s details + latest IoT data.
     """
+
     try:
-        contract = Contract.objects.select_related('buyer', 'seller').get(contract_id=contract_id)
+        # 1️⃣ Fetch the contract efficiently with related users preloaded
+        contract = (
+            Contract.objects
+            .select_related("buyer", "seller")
+            .defer("contract_abi")  # Skip heavy JSON fields
+            .get(contract_id=contract_id)
+        )
+
+        # 2️⃣ Build subquery for latest IoTData per device
+        latest_data_subquery = (
+            IoTData.objects
+            .filter(device=OuterRef("pk"))
+            .order_by("-recorded_at")
+        )
+
+        # 3️⃣ Annotate device with latest IoT data
+        device = (
+            IoTDevice.objects
+            .filter(contract=contract)
+            .annotate(
+                latest_temp=Subquery(latest_data_subquery.values("temperature")[:1]),
+                latest_batt=Subquery(latest_data_subquery.values("battery_voltage")[:1]),
+                latest_lat=Subquery(latest_data_subquery.values("gps_lat")[:1]),
+                latest_long=Subquery(latest_data_subquery.values("gps_long")[:1]),
+                latest_recorded_at=Subquery(latest_data_subquery.values("recorded_at")[:1]),
+            )
+            .first()
+        )
+
+        # 4️⃣ Build clean response
+        data = {
+            "contract_id": contract.contract_id,
+            "product_name": contract.product_name,
+            "quantity": contract.quantity,
+            "status": contract.status,
+            "latest_temp": (
+                f"{device.latest_temp:.1f}" if device and device.latest_temp is not None else "N/A"
+            ),
+            "battery_voltage": (
+                f"{device.latest_batt:.2f}V" if device and device.latest_batt is not None else "N/A"
+            ),
+            "gps_lat": device.latest_lat if device and device.latest_lat else None,
+            "gps_long": device.latest_long if device and device.latest_long else None,
+            "recorded_at": (
+                device.latest_recorded_at.strftime("%Y-%m-%d %H:%M:%S")
+                if device and device.latest_recorded_at else "N/A"
+            ),
+            # Buyer info
+            "buyer_name": getattr(contract.buyer, "full_name", "Unknown"),
+            "buyer_email": getattr(contract.buyer, "email", "Unknown"),
+            "buyer_wallet": getattr(contract.buyer, "wallet_address", "—"),
+            # Seller info
+            "seller_name": getattr(contract.seller, "full_name", "Unknown"),
+            "seller_email": getattr(contract.seller, "email", "Unknown"),
+            "seller_wallet": getattr(contract.seller, "wallet_address", "—"),
+        }
+
+        return JsonResponse(data)
+
     except Contract.DoesNotExist:
-        raise Http404("Shipment not found")
+        raise Http404("Contract not found")
 
-    # 🧠 Get latest IoT data linked to this contract
-    device = IoTDevice.objects.filter(contract_id=contract_id).first()
-    latest_iot = IoTData.objects.filter(device_id=device.device_id).order_by('-recorded_at').first()
-
-    # ✅ Structure data for JSON response
-    data = {
-        "contract_id": contract.contract_id,
-        "product_name": contract.product_name,
-        "quantity": contract.quantity,
-        "price": float(contract.price) if contract.price else None,
-        "status": contract.status,
-        "contract_address": contract.contract_address,
-        "deployment_date": contract.start_date.strftime("%Y-%m-%d %H:%M:%S") if contract.start_date else "N/A",
-
-        # 🧾 Parties
-        "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else contract.buyer.username,
-        "buyer_email": contract.buyer.email,
-        "buyer_wallet": getattr(contract.buyer, 'm_address', 'N/A'),
-        "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else contract.seller.username,
-        "seller_email": contract.seller.email,
-        "seller_wallet": getattr(contract.seller, 'm_address', 'N/A'),
-
-        # 🌡 IoT Data Summary
-        "latest_temp": latest_iot.temperature if latest_iot else "N/A",
-        # "min_temp": latest_iot.min_temp if latest_iot else "N/A",
-        # "max_temp": latest_iot.max_temp if latest_iot else "N/A",
-        "battery_voltage": latest_iot.battery_voltage if latest_iot else "N/A",
-        "recorded_at": latest_iot.recorded_at.strftime("%Y-%m-%d %H:%M:%S") if latest_iot else "N/A",
-    }
-
-    return JsonResponse(data)
+    except Exception as e:
+        print(f"[Shipment Details Error] {e}")
+        return JsonResponse({"error": "Failed to load shipment details"}, status=500)
 
 @login_required(login_url='login')
 def completed_view(request):

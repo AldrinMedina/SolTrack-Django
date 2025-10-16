@@ -31,8 +31,20 @@ const chartElement = document.getElementById('chartData');
 const chartCanvas = document.getElementById('temperatureChart');
 
 if (chartElement && chartCanvas) {
-    const labels = JSON.parse(chartElement.dataset.labels);
-    const values = JSON.parse(chartElement.dataset.values);
+    let labels = [];
+    let values = [];
+
+    try {
+        labels = chartElement.dataset.labels ? JSON.parse(chartElement.dataset.labels) : [];
+        values = chartElement.dataset.values ? JSON.parse(chartElement.dataset.values) : [];
+    } catch (err) {
+        console.warn("Chart data parse error:", err);
+        labels = [];
+        values = [];
+    }
+
+
+
 
     const ctx = chartCanvas.getContext('2d');
     window.temperatureChart = new Chart(ctx, {
@@ -191,24 +203,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Notification system
-// function showNotification(message, type = 'info') {
-//     const notification = document.createElement('div');
-//     notification.className = `alert alert-${type} position-fixed`;
-//     notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-//     notification.innerHTML = `
-//         <div class="d-flex align-items-center">
-//             <i class="bi bi-info-circle me-2"></i>
-//             <span>${message}</span>
-//             <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
-//         </div>
-//     `;
-//     document.body.appendChild(notification);
-    
-//     setTimeout(() => {
-//         notification.remove();
-//     }, 5000);
-// }
 
 // =====================
 // 📊 Real-Time Dashboard Update
@@ -218,6 +212,8 @@ function updateDashboard() {
     fetch(DASHBOARD_DATA_URL)  // <-- make sure this matches your Django URL name or pattern
         .then(response => response.json())
         .then(data => {
+            if (data.last_updated && data.last_updated === lastUpdate) return;
+            lastUpdate = data.last_updated;
             // --- Overview Metrics ---
             if (document.getElementById("avgTemp")) {
                 document.getElementById("avgTemp").textContent = `${data.avg_temp}°C`;
@@ -316,7 +312,7 @@ function updateOngoingShipments() {
 // Auto-run for ongoing page
 if (window.location.pathname.includes('ongoing')) {
     updateOngoingShipments();
-    setInterval(updateOngoingShipments, 10000); // 10 seconds
+    setInterval(updateOngoingShipments, 30000); // every 30 sec
 }
 
 document.addEventListener('click', function(e) {
@@ -360,22 +356,26 @@ document.addEventListener('click', function(e) {
 
 // Auto-refresh alerts section every minute
 setInterval(() => {
-    fetch('/dashboard/alerts/')
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const newContent = parser.parseFromString(html, 'text/html')
-                .querySelector('#alerts-content');
-            document.querySelector('#alerts-content').innerHTML = newContent.innerHTML;
-        })
-        .catch(err => console.error('Alert refresh failed:', err));
+    fetch(ALERTS_DATA_URL)
+        .then(res => res.json())
+        .then(data => {
+            const container = document.querySelector("#alerts-content");
+            container.innerHTML = "";
+            data.alerts.forEach(alert => {
+                container.insertAdjacentHTML("beforeend", `
+                    <div class="alert alert-${alert.severity.toLowerCase()}">
+                        ${alert.alert_message}
+                    </div>
+                `);
+            });
+        });
 }, 60000);
 
 
-// Auto-refresh only if dashboard-related pages are active
-if (window.location.pathname.includes("overview") || 
-    window.location.pathname.includes("dashboard")) {
-    setInterval(updateDashboard, 30000); // every 30 sec
-    updateDashboard(); // run immediately on load
-}
+
+document.addEventListener("DOMContentLoaded", () => {
+    updateDashboard();
+    setInterval(updateDashboard, 60000);
+});
+
 
