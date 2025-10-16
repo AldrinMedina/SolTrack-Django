@@ -8,7 +8,7 @@
             <h2 class="fw-bold text-white mb-2">Active Contracts</h2>
             <p class="text-white opacity-75">Contracts deployed and awaiting activation.</p>
         </div>
-        {% if role == 'buyer' %}
+        {% if role == 'Buyer' %}
         <div>
            <button 
             type="button" 
@@ -55,7 +55,7 @@
                             
                             <!-- ACTIONS COLUMN -->
                             <td class="px-4 py-2 text-center">
-                                {% if user_role == 'seller' and contract.status == 'Active' %}
+                                {% if user_role == 'Seller' and contract.status == 'Active' %}
                                     <!-- Activation form -->
                                     <form method="POST" action="{% url 'activate_contract' contract.contract_id %}" class="d-inline">
                                         {% csrf_token %}
@@ -101,30 +101,37 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted">Enter shipment and payment details. A contract will be deployed to Sepolia.</p>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-dark mb-3">Buyer Information</h6>
-                            <div class="mb-3">
-                                <label for="buyer_name" class="form-label">Buyer Name</label>
-                                <input type="text" class="form-control" id="buyer_name" name="buyer_name" placeholder="Enter buyer name" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="buyer_id" class="form-label">Buyer Address</label>
-                                <input type="text" class="form-control" id="buyer_id" name="buyer_id" placeholder="0x..." required>
-                            </div>
-                            
-                            <h6 class="fw-bold text-dark mb-3 mt-4">Seller Information</h6>
-                            <div class="mb-3">
-                                <label for="seller_name" class="form-label">Seller Name</label>
-                                <input type="text" class="form-control" id="seller_name" name="seller_name" placeholder="Enter seller name" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="seller_id" class="form-label">Seller Address</label>
-                                <input type="text" class="form-control" id="seller_id" name="seller_id" placeholder="0x..." required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
+    <p class="text-muted">Enter shipment and payment details. A contract will be deployed to Sepolia.</p>
+    <div class="row">
+        <div class="col-md-6">
+            <h6 class="fw-bold text-dark mb-3">Buyer Information (You)</h6>
+            <div class="mb-3">
+                <label for="buyer_name" class="form-label">Buyer Name</label>
+                <input type="text" class="form-control" id="buyer_name" value="{{ current_user.full_name }}" disabled>
+            </div>
+            <div class="mb-3">
+                <label for="buyer_id_display" class="form-label">Buyer Address</label>
+                <input type="text" class="form-control" id="buyer_id_display" value="{{ current_user.m_address }}" disabled>
+            </div>
+            
+            <input type="hidden" name="buyer_full_name" value="{{ current_user.full_name }}">
+            <input type="hidden" name="buyer_address" value="{{ current_user.m_address }}">
+            <input type="hidden" name="buyer_user_id" value="{{ current_user.user_id }}">
+            <input type="hidden" name="buyer_lat" value="{{ current_user.latitude }}">
+            <input type="hidden" name="buyer_lon" value="{{ current_user.longitude }}">
+            
+            
+            <h6 class="fw-bold text-dark mb-3 mt-4">Seller Placeholder</h6>
+            <div class="mb-3">
+                <label for="seller_placeholder_name" class="form-label">Seller Name (Placeholder)</label>
+                <input type="text" class="form-control" id="seller_placeholder_name" name="seller_name" value="" placeholder="Seller name here" >
+            </div>
+            <div class="mb-3">
+                <label for="seller_placeholder_id" class="form-label">Seller Address (Placeholder)</label>
+                <input type="text" class="form-control" id="seller_placeholder_id" name="seller_address" value="" placeholder="Seller Add here" >
+            </div>
+        </div>
+        <div class="col-md-6">
                             <h6 class="fw-bold text-dark mb-3">Contract Terms</h6>
                             <div class="mb-3">
                                 <label for="vaccine_select" class="form-label">Select Product Name</label>
