@@ -34,6 +34,9 @@ def login_view(request):
             request.session["user_id"] = user.user_id
             request.session["user_email"] = user.email
             request.session["user_role"] = user.role
+            request.session["m_address"] = user.m_address
+            request.session["user_latitude"] = user.latitude
+            request.session["user_longitude"] = user.longitude
             request.session["login_time"] = timezone.now().isoformat()
 
             login(request, user)  # Django built-in login

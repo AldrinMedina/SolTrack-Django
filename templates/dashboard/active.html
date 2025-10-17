@@ -22,7 +22,7 @@
         {% endif %}
     </div>
 
-    <div class="row">
+     <div class="row">
         <div class="col-12">
             {% if contracts %}
             <div class="table-responsive">
@@ -31,8 +31,8 @@
                         <tr>
                             <th class="px-4 py-3">Status</th>
                             <th class="px-4 py-3">Product Name</th>
-                            <th class="px-4 py-3">Buyer</th>
-                            <th class="px-4 py-3">Seller</th>
+                            <th class="px-4 py-3">Buyer / Address</th>
+                            <th class="px-4 py-3">Seller / Address</th>
                             <th class="px-4 py-3">Contract Address</th>
                             <th class="px-4 py-3">Quantity</th>
                             <th class="px-4 py-3">Price (ETH)</th>
@@ -40,31 +40,28 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for contract in contracts %}
+                        {% for contract_data in contracts %}
                         <tr>
                             <td class="px-4 py-2">
-                                <span class="badge bg-warning text-dark">{{ contract.status }}</span>
+                                <span class="badge bg-{{ contract_data.status_class }} text-light">{{ contract_data.status }}</span>
                             </td>
                             <td class="px-4 py-2">{{ contract.product_name }}</td>
                             <td class="px-4 py-2">{{ contract.buyer.full_name }}</td>
                             <td class="px-4 py-2">{{ contract.seller.full_name }}</td>
                             <td class="px-4 py-2 text-truncate" style="max-width: 150px;">
-                                <a href="#" title="{{ contract.contract_address }}">{{ contract.contract_address|truncatechars:10 }}</a>
+                                <a href="#" title="{{ contract.contract_address }}" data-bs-toggle="tooltip">{{ contract.contract_address|truncatechars:10 }}</a>
                             </td>
                             <td class="px-4 py-2">{{ contract.quantity }}</td>
                             <td class="px-4 py-2">{{ contract.price }}</td>
                             
-                            <!-- ACTIONS COLUMN -->
                             <td class="px-4 py-2 text-center">
-                                {% if role == 'Seller' and contract.status == 'Active' %}
+                                {% if user_role == 'seller' and contract.status == 'Pending' %}
                                     <!-- Activation form -->
                                     <form method="POST" action="{% url 'activate_contract' contract.contract_id %}" class="d-inline">
                                         {% csrf_token %}
                                         
-                                        <!-- Hidden inputs for Seller's DB location (Start Coords) -->
-                                        <!-- These values are passed to the 'activate_contract' view for start_coords -->
-                                        <input type="hidden" name="client_lat" value="{{ contract.seller.latitude }}">
-                                        <input type="hidden" name="client_lon" value="{{ contract.seller.longitude }}">
+                                        <input type="hidden" name="client_lat" value="{{ contract_data.contract.seller.latitude }}">
+                                        <input type="hidden" name="client_lon" value="{{ contract_data.contract.seller.longitude }}">
                                         
                                         <button 
                                             type="submit" 
@@ -92,80 +89,273 @@
     </div>
 </div>
 
+
 <div class="modal fade" id="createContractModal" tabindex="-1" aria-labelledby="createContractModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-            <form method="post" action="{% url 'create_contract' %}">
+            <form method="post" action="{% url 'create_contract' %}" id="createContractForm">
                 {% csrf_token %}
                 <div class="modal-header">
                     <h5 class="modal-title" id="createContractModalLabel">Deploy New Escrow Contract</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Product Selection Table -->
-                    <h6 class="fw-bold text-dark mb-3">Select Product</h6>
+                    <h6 class="fw-bold text-dark mb-3">Select Seller</h6>
+                    <div class="mb-3">
+                        <label for="selected_seller" class="form-label">Seller</label>
+                        <select class="form-select" id="selected_seller" name="selected_seller" required>
+                            <option value="">Choose a Seller...</option>
+                            {% for seller in sellers %}
+                                <option value="{{ seller.pk }}">
+                                    {{ seller.organization }} ({{ seller.m_address|truncatechars:10 }}...)
+                                </option>
+                            {% empty %}
+                                <option value="" disabled>No Sellers available</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Selecting a seller will load their available products below.</small>
+                    </div>
+                     <h6 class="fw-bold text-dark mb-3 mt-4">Select Product</h6>
                     <div class="table-responsive mb-3" style="max-height: 250px; overflow-y: auto;">
                         <table class="table table-bordered table-hover align-middle" id="productTable">
                             <thead class="table-light">
                                 <tr>
                                     <th>Select</th>
                                     <th>Product Name</th>
-                                    <th>Available Quantity</th>
+                                    <th>Quantity</th>
                                     <th>Price (ETH)</th>
                                     <th>Max Temp (°C)</th>
-
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for product in products %}
+                            <tbody id="productTableBody">
                                 <tr>
-                                    <td>
-                                        <input type="radio" name="selected_product" 
-                                            value="{{ product.product_id }}"
-                                            data-seller="{{product.seller_id}}"
-                                            data-name="{{ product.product_name }}"
-                                            data-quantity="{{ product.quantity_available }}"
-                                            data-price="{{ product.price_eth }}"
-                                            data-maxtemp="{{ product.max_temp }}">
-                                    </td>
-                                    <td>{{ product.product_name }}</td>
-                                    <td>{{ product.quantity_available }}</td>
-                                    <td>{{ product.price_eth }}</td>
-                                    <td>{{ product.max_temp }}</td>
+                                    <td colspan="5" class="text-center text-muted">Please select a Seller to view their products.</td>
                                 </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted">No products available.</td>
-                                </tr>
-                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
-
-                    <!-- Hidden field for selected product -->
+                     <!-- Hidden field for selected product -->
                     <input type="hidden" id="buyer_id" name="buyer_id" value="{{ request.user.user_id }}">
                     <input type="hidden" id="seller_id" name="seller_id">
                     <input type="hidden" id="product_name" name="product_name">
+                    <div class="mb-3">
+                        <label for="buyer_info" class="form-label">Buyer Info</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="buyer_info" 
+                            value="{{ current_user.organization }} ({{ current_user.m_address|truncatechars:10 }}...)" 
+                            disabled
+                        >
+                    </div>
+
+                    {% if deployer_user %}
+                    <div class="mb-3">
+                        <label for="deployer_info" class="form-label">Deployer Info (Escrow Fee Recipient)</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="deployer_info" 
+                            value="{{ deployer_user.organization }} ({{ deployer_user.m_address|truncatechars:10 }}...)" 
+                            disabled
+                        >
+                        <input type="hidden" name="deployer_address" value="{{ deployer_user.m_address }}">
+                    </div>
+                    {% endif %}
 
                     <div class="mb-3">
                         <label for="quantity" class="form-label">Quantity (Units)</label>
-                        <input type="number" class="form-control" id="quantity" name="quantity" required>
+                        <input type="number" class="form-control" id="quantity" name="quantity" required min="1" value="1" disabled>
                     </div>
+                                        
                     <div class="mb-3">
-                        <label for="payment_amount" class="form-label">Price / Payment Amount (ETH)</label>
-                        <input type="number" class="form-control" id="payment_amount" name="payment_amount" step="0.01" required>
+                        <label for="calculated_amount_display" class="form-label fw-bold">
+                            Receipt
+                            <span class="fw-normal text-muted">including Escrow fee</span>
+                        </label>
+                        <input type="text" class="form-control" id="calculated_amount_display" value="5.00" disabled>
+                        
+                        <small class="form-text text-muted">
+                        product value +
+                            <span id="escrow_fee_display">5.00 ETH</span> 
+                            escrow fee to deployer
+                        </small>
+                        
+                        <input type="hidden" id="unit_price_data" value="0">
+                        <input type="hidden" id="escrow_fee_data" value="5.00"> 
+                        <input type="hidden" id="contract_value_eth" name="price" value="0">
                     </div>
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Confirm & Deploy Contract</button>
+                    <button type="submit" class="btn btn-primary" id="deployContractBtn" disabled>Confirm & Deploy Contract</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('createContractModal');
+        const sellerSelect = document.getElementById('selected_seller');
+        const productTableBody = document.getElementById('productTableBody');
+        const quantityInput = document.getElementById('quantity');
+        const totalDisplay = document.getElementById('calculated_amount_display');
+        const unitPriceData = document.getElementById('unit_price_data');
+        const deployContractBtn = document.getElementById('deployContractBtn');
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const escrowFeeData = document.getElementById('escrow_fee_data');
+const contractValueEthInput = document.getElementById('contract_value_eth');
+        // --- Helper Functions ---
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+          return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+        function updatePrice() {
+    // 1. Get components
+    const unitPrice = parseFloat(unitPriceData.value) || 0;
+    const quantity = parseInt(quantityInput.value) || 0;
+    const escrowFee = parseFloat(escrowFeeData.value) || 0; // 0.01
+
+    // 2. Calculate Contract Value (Price x Quantity)
+    const contractValue = (unitPrice * quantity);
+
+    // 3. Calculate Total Initial Payment (Contract Value + Escrow Fee)
+    const totalPayment = (contractValue + escrowFee);
+    
+    // 4. Update fields
+    totalDisplay.value = totalPayment.toFixed(4); // Display P*Q + Fee
+    contractValueEthInput.value = contractValue.toFixed(4); // Hidden field for form submission (P*Q)
+
+    // Enable deploy button only if contract value > 0 (meaning a product is selected) and a seller is selected
+    deployContractBtn.disabled = !(contractValue > 0 && sellerSelect.value);
+}
+
+        function handleProductSelection() {
+            // Re-select radios after DOM update
+            const productRadios = productTableBody.querySelectorAll('.product-radio');
+            
+            productRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.checked) {
+                        unitPriceData.value = this.dataset.price;
+                        
+                        // Enable quantity input and set max
+                        const maxQuantity = parseInt(this.dataset.quantity);
+                        quantityInput.removeAttribute('disabled');
+                        quantityInput.setAttribute('max', maxQuantity);
+                        
+                        // Reset quantity if current value exceeds new max
+                        if (parseInt(quantityInput.value) > maxQuantity) {
+                            quantityInput.value = maxQuantity;
+                        }
+                    }
+                    updatePrice();
+                });
+            });
+            
+            // If there's at least one product, automatically select the first one
+            if (productRadios.length > 0) {
+                productRadios[0].checked = true;
+                productRadios[0].dispatchEvent(new Event('change'));
+            } else {
+                // No products, reset quantity/price fields
+                quantityInput.setAttribute('disabled', 'disabled');
+                quantityInput.value = 1;
+                unitPriceData.value = 0;
+                updatePrice();
+            }
+        }
+        
+        // --- AJAX Function ---
+        
+        function fetchProducts(sellerId) {
+            if (!sellerId) {
+                productTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Please select a Seller to view their products.</td></tr>';
+                unitPriceData.value = 0;
+                updatePrice();
+                return;
+            }
+            
+            // Ensure you have a URL route mapped to /get-products/<int:seller_id>/
+            const url = `/dashboard/get-products/${sellerId}/`;
+
+            // Show loading state
+            productTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-info"><i class="bi bi-arrow-repeat spin"></i> Loading products...</td></tr>';
+
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                let html = '';
+                if (data.products && data.products.length > 0) {
+                    data.products.forEach(product => {
+                        html += `
+                            <tr>
+                                <td>
+                                    <input type="radio" name="selected_product" class="product-radio"
+                                        value="${product.product_id}"
+                                        data-price="${product.price_eth}"
+                                        data-maxtemp="${product.max_temp}"
+                                        data-quantity="${product.quantity_available}"
+                                        required>
+                                </td>
+                                <td>${product.product_name}</td>
+                                <td>${product.quantity_available}</td>
+                                <td>${product.price_eth}</td>
+                                <td>${product.max_temp}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    html = '<tr><td colspan="5" class="text-center text-muted">No products available from this seller.</td></tr>';
+                }
+                productTableBody.innerHTML = html;
+                handleProductSelection();
+            })
+            .catch(error => {
+                console.error('Error fetching products:', error);
+                productTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading products. Try again.</td></tr>';
+                unitPriceData.value = 0;
+                updatePrice();
+            });
+        }
+        
+        // --- Event Listeners ---
+        
+        // Listen for changes in the seller dropdown
+        sellerSelect.addEventListener('change', function() {
+            fetchProducts(this.value);
+        });
+
+        // Listen for quantity changes
+        quantityInput.addEventListener('input', updatePrice);
+        quantityInput.addEventListener('change', updatePrice);
+
+        // Reset state when modal is closed/hidden
+        modal.addEventListener('hidden.bs.modal', function() {
+            sellerSelect.value = '';
+            productTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Please select a Seller to view their products.</td></tr>';
+            unitPriceData.value = 0;
+            quantityInput.value = 1;
+            quantityInput.setAttribute('disabled', 'disabled');
+            updatePrice();
+        });
+        
+        // Ensure initial state is clean when modal opens
+        modal.addEventListener('shown.bs.modal', function() {
+             fetchProducts(sellerSelect.value); // Re-run fetch in case a seller was pre-selected
+        });
+    });
+</script>
 
 
 {% endblock %}

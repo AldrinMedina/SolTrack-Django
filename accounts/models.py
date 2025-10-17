@@ -38,7 +38,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(default=timezone.now)
     longitude = models.FloatField(blank=True, null=True)
     latitude = models.FloatField(blank=True, null=True)
-
+    private_key = models.CharField(max_length=100, blank=True, null=True)
     business_license = models.BinaryField(blank=True, null=True)
 
 
