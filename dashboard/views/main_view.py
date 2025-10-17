@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.db import models
-from django.db.models import Avg, Min, Max
+from django.db.models import Avg, Min, Max, Q
 from django.http import HttpResponse, Http404, JsonResponse
 
 from reportlab.lib import colors
@@ -127,8 +127,28 @@ def _check_delivery_status(contract_db):
 
     # Return progress percentage and status string
     return progress_percent, f"{progress_percent:.0f}%"
-
-
+def get_latest_temperature(contract):
+    """
+    Retrieves the latest temperature reading for a contract's assigned IoT device.
+    """
+    if not hasattr(contract, 'IoT_Assigned') or not contract.IoT_Assigned:
+        return 'N/A'
+    
+    device_id = contract.IoT_Assigned.device_id
+    
+    try:
+        latest_data = IoTData.objects.filter(
+            device_id=device_id
+        ).order_by('-recorded_at').only('temperature').first()
+        
+        if latest_data and latest_data.temperature is not None:
+            return f"{latest_data.temperature:.1f}"
+        
+        return 'No Data'
+        
+    except Exception as e:
+        print(f"Error fetching temperature for device {device_id}: {e}")
+        return 'Error'
 def _get_live_iot_data():
   
     if aio is None:
@@ -320,7 +340,8 @@ def get_products_by_seller(request, seller_id):
 @login_required(login_url='login')
 def active_view(request):
     sellers = CustomUser.objects.filter(role__iexact='seller')
-    user_role = request.user.role
+    user_role = request.user.role.lower() 
+    print ( request.session.get('m_address'))
     deployer_user = None
     try:
         # Fetch the Deployer who is the user with ID 10
@@ -357,32 +378,31 @@ def active_view(request):
         current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float) # Assuming _get_current_temp exists
         
         # 3. Determine status
-        if contract_instance.status == 'Pending':
-             status = 'Pending'
-             status_class = 'info'
-        elif contract_instance.status == 'Ongoing':
-            status = 'Ongoing'
-            status_class = 'info'
-        elif contract_instance.status == 'In Transit':
-            status = 'In Transit'
-            status_class = 'warning'
-        else:
-            status = 'Active'
-            status_class = 'success'
+        status = contract_instance.status
+        status_class = 'primary' # Default color
         
-        # NOTE: Only check temperature for Ongoing/In Transit, but leaving the logic as is:
-        if current_temp_float > temp_threshold_float:
-            status = 'Alert' 
+        if status == 'Pending':
+            # Pending status should not trigger temperature check
             status_class = 'warning'
+        elif status in ['Ongoing', 'In Transit', 'Active']:
+            status_class = 'info'
+            # Only check temperature deviation for actively tracked contracts
+            if current_temp_float > temp_threshold_float:
+                status = 'Temp Alert' # Changed from 'Alert' to 'Temp Alert' for clarity
+                status_class = 'danger' # Use danger for temp alert
+        else:
+             # Fallback for any other 'active' state not explicitly handled
+             status_class = 'secondary'
         
         # 4. Assemble final data object
+        buyer_name = contract_instance.buyer.full_name if contract_instance.buyer and contract_instance.buyer.full_name else contract_instance.buyer_address
+        seller_name = contract_instance.seller.full_name if contract_instance.seller and contract_instance.seller.full_name else contract_instance.seller_address
         active_contracts.append({
             'contract': contract_instance,
             
-            # NOTE: Switched to accessing 'buyer_address' and 'seller_address' directly 
-            # as the fields in Contract model seem to be addresses, and the view should handle fetching User objects if necessary.
-            'buyer_name': contract_instance.buyer.full_name if contract_instance.buyer else "N/A",
-            'seller_name': contract_instance.seller.full_name if contract_instance.seller else "N/A",
+            # Use the derived names (which fall back to addresses)
+            'buyer_name': buyer_name,
+            'seller_name': seller_name,
    
             'current_temp': current_temp_str, 
             'status': status,
@@ -470,52 +490,46 @@ def product_delete_view(request, pk):
     return redirect("product_manager")
 
     
-    
 @login_required(login_url='login')
 def ongoing_view(request):
     user = request.user
-    user_role = request.session.get("user_role", "").lower()
-    user_id = request.session.get("user_id")
-    # 🧩 Filter contracts based on role
-    if user_role == "buyer":
-        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"], buyer_id=user_id)
-    elif user_role == "seller":
-        contracts = Contract.objects.filter( status__in=["Ongoing", "In Transit"], seller_id=user_id)
-    else:  # admin
-        contracts = Contract.objects.filter(status__in=["Ongoing", "In Transit"])
+    user_role = request.session.get("user_role", "").capitalize()
+    
+    contracts = Contract.objects.filter(status__in=['Ongoing', 'Alert']).order_by('-start_date')
+    
+    if user_role == "Buyer":
+        contracts = contracts.filter(buyer_address=user.m_address)
+    elif user_role == "Seller":
+        contracts = contracts.filter(seller_address=user.m_address)
 
-    # --- NEW: Fetch Live Adafruit IO Data ONCE ---
-    live_temp_float, live_temp_str, _ = _get_live_iot_data()
-
-    # 🌡️ Prepare ongoing shipment data
     ongoing_data = []
     for contract in contracts:
-        # FIX 2: Use the live_temp_str instead of the DB query
         
-        # Determine temperature display (use "N/A" if the fetch failed)
-        current_temp_display = live_temp_str if live_temp_float != -100.0 else "N/A" 
-
+        # 💡 FIX: Query the IoTDevice linked to the Contract
+        try:
+            device = IoTDevice.objects.get(contract=contract)
+        except IoTDevice.DoesNotExist:
+            current_temp = 'N/A (No Device)'
+        else:
+            # 💡 CORRECT QUERY: Filter IoTData using the Device object
+            latest_data = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
+            current_temp = latest_data.temperature if latest_data else 'N/A'
 
         ongoing_data.append({
-            "contract_id": contract.contract_id,
-            "product_name": contract.product_name,
-            # Use the live temperature string
-            "temperature": current_temp_display, 
-            "status": contract.status,
-            "min_temp": contract.min_temp,
-            "max_temp": contract.max_temp,
-            "buyer_name": contract.buyer.full_name if contract.buyer else "—",
-            "seller_name": contract.seller.full_name if contract.seller else "—",
+            'contract_id': contract.contract_id,
+            'product_name': contract.product_name,
+            # ... other contract fields
+            'status': contract.status,
+            'max_temp': contract.max_temp,
+            'current_temp': current_temp, # Now correctly populated
         })
 
     context = {
         "ongoing_data": ongoing_data,
-        "user_role": user_role,
+        "role": user_role
     }
 
-    return render(request, "dashboard/ongoing.html", context)
-
-
+    return render(request, 'dashboard/ongoing.html', context)
 @login_required(login_url='login')
 def ongoing_data_json(request):
     user = request.user

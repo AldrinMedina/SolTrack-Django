@@ -20,15 +20,15 @@ from accounts.models import CustomUser
 from web3 import Web3
 from solcx import compile_source, install_solc, set_solc_version
 from web3.exceptions import ContractLogicError
-
-import json 
+#from .main_view import get_latest_temperature
 from datetime import datetime
 from web3 import Web3
 from solcx import compile_source, install_solc, set_solc_version
 load_dotenv() 
 install_solc('0.5.16')
 set_solc_version('0.5.16')
-
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
 web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY") # Still needed for signing
@@ -54,9 +54,39 @@ emit Transfer(msg.sender, _to, msg.value);
 }
 '''
 
+      
+def get_contract_temperature(request, contract_id):
+    """
+    API endpoint to fetch the latest temperature for a single ongoing contract.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        # Removed .select_related('IoT_Assigned') to fix the Invalid Field error.
+        contract = Contract.objects.get(contract_id=contract_id, status='Ongoing')
+        
+        # 2. Get the latest temperature using the helper function
+        current_temp = get_latest_temperature(contract)
+
+        return JsonResponse({
+            'contract_id': contract_id,
+            'current_temp': current_temp,
+            # Convert Decimal/float to string for JSON serialization
+            'max_temp': str(contract.max_temp) 
+        })
+        
+    except Contract.DoesNotExist:
+        return JsonResponse({'error': 'Contract not found or not ongoing'}, status=404)
+    except Exception as e:
+        print(f"Error fetching temperature: {e}")
+        return JsonResponse({'error': 'Internal server error'}, status=500)
 def get_deployer_key_and_address():
 	try:
+		# Assuming the 10th user in the table is the Deployer/Escrow account
 		deployer_user = CustomUser.objects.all()[9]
+		deployer_user.private_key = os.getenv("DEPLOYER_PRIVATE_KEY")
+		deployer_user.m_address = os.getenv("DEPLOYER_ADDRESS")
 		if not deployer_user.m_address or not deployer_user.private_key:
 			raise ValueError("10th user is missing 'm_address' or 'private_key' in the database.")			
 		return deployer_user.m_address, deployer_user.private_key
@@ -66,21 +96,28 @@ def get_deployer_key_and_address():
 	except Exception as e:
 		raise Exception(f"Failed to fetch deployer credentials: {e}")
 
-
 @login_required(login_url='login')
 def activate_contract(request, contract_id):
 	# Fetch deployer address for use as the escrow address
 	DEPLOYER_ADDRESS, _ = get_deployer_key_and_address() 
 
 	if request.method != 'POST':
+		# Redirect on non-POST request
 		return HttpResponseRedirect(reverse('active'))
 
 	try:
 		contract_db = Contract.objects.get(contract_id=contract_id)		
-		seller_address = request.user.m_address 
+		
+		# 1. SECURITY CHECK: Ensure the user activating is the designated seller AND the contract is Pending.
+		if contract_db.seller_address != request.user.m_address or contract_db.status != 'Pending':
+			messages.error(request, "Authorization failed. Only the Seller can activate a Pending contract.")
+			return HttpResponseRedirect(reverse('active'))
+
+		# Buyer is the SENDER of the money (to the Deployer/Escrow)
 		sender_address = contract_db.buyer_address 
 
 		try:
+			# Get the buyer's private key from the database (since the seller doesn't have it in their session)
 			buyer_user = CustomUser.objects.get(m_address=sender_address)
 			sender_private_key = buyer_user.private_key
 		except CustomUser.DoesNotExist:
@@ -90,6 +127,8 @@ def activate_contract(request, contract_id):
 			
 		escrow_address = DEPLOYER_ADDRESS 
 		
+		# 2. Get Seller's location for start_coord (using the current user's location)
+		seller_user = request.user 
 		seller_lat = seller_user.latitude
 		seller_lon = seller_user.longitude
 		start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
@@ -99,38 +138,43 @@ def activate_contract(request, contract_id):
 			
 		nonce = web3.eth.get_transaction_count(sender_address)
 		price_eth = float(contract_db.price)
-		total_eth_to_send = FIXED_ESCROW_FEE_ETH + price_eth
+		
+		# The full product price is what is sent here
+		total_eth_to_send = price_eth 
 		amount_to_send_wei = web3.to_wei(total_eth_to_send, 'ether')
 		
-		print(f"\n[{timezone.now()}] STARTING ACTIVATION:")
-		print(f"  Total ETH: {total_eth_to_send} (Fixed: {FIXED_ESCROW_FEE_ETH} + Price: {price_eth})")
-		print(f"  Sender (Buyer): {sender_address}")
-		print(f"  Recipient (Escrow): {escrow_address}")
+		# --- ADDED/CONFIRMED PRINT STATEMENTS (Product Price Payment) ---
+		print(f"\n[{timezone.now()}] STARTING ACTIVATION (Product Price Payment):")
+		print(f"  AMOUNT: {total_eth_to_send} ETH")
+		print(f"  FROM (Buyer): {sender_address}")
+		print(f"  TO (Escrow/Deployer): {escrow_address}")
 		
 		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
 
 		tx_data = {
 			'chainId': web3.eth.chain_id,
-			'from': sender_address, # Transaction 'from' the Buyer
+			'from': sender_address, # Transaction 'from' the Buyer's wallet
 			'to': escrow_address, 
 			'nonce': nonce,
 			'value': amount_to_send_wei,
 			'maxFeePerGas': int(estimated_fees * 2), 
 			'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'), 
-			'gas':  21000
+			'gas':  21000 # Standard ETH transfer gas limit
 		}
 		
 		signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=sender_private_key) 
 		tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
 		receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+		
 		if receipt.status == 1:
-			messages.success(request, f"Contract {contract_db.contract_id} successfully funded and shipment started.")
+			messages.success(request, f"Contract {contract_db.contract_id} successfully funded with {price_eth} ETH and shipment started.")
 		else:
 			raise Exception(f"Transaction failed on-chain. Status: {receipt.status}")
 
-		# Update status and start date/time (Seller/coords already set in deployment)
+		# 4. Update status and start date/time 
 		contract_db.status = 'Ongoing' 
 		contract_db.start_date = timezone.now()
+		contract_db.start_coord = start_coords_str # Seller's coordinates upon activation
 		contract_db.save()
 		
 	except Contract.DoesNotExist:
@@ -154,7 +198,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 	bytecode = contract_interface['bin']
 	SimpleTransfer = web3.eth.contract(abi=abi, bytecode=bytecode)
 
-	# prep and deploy
+	# prep and dep
 	nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
 	print(f"1. Nonce for Deployment: {nonce}")
 	estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1] 
@@ -189,7 +233,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 		contract_id=next_contract_id,
 		
 		buyer_address=BuyerAddress,
-		seller_address=SellerAddress, # <-- NEW
+		seller_address=SellerAddress, 
 		
 		product_name=ProductName,
 		quantity=Quantity, 
@@ -200,9 +244,9 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 		contract_abi=contract_interface['abi'], 
 		
 		max_temp=MaxTemp, 
-		status='Pending', # Remains Pending (awaiting funding)
+		status='Pending',
 		end_coord=EndCoords, 
-		start_coord=StartCoords, # <-- NEW
+		start_coord=StartCoords, 
 	)
 	print("6. Database save complete. Process SUCCESSFUL. Status: Pending.")
 	
@@ -234,7 +278,7 @@ def create_contract_view(request):
 			
 			# 3. Fetch Seller data
 			seller_user = CustomUser.objects.get(pk=selected_seller_id, role__iexact='seller')
-			seller_address = seller_user.m_address
+			seller_address = seller_user.m_address # <--- SELLER'S ADDRESS
 			seller_lat = seller_user.latitude 
 			seller_lon = seller_user.longitude
 			start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
@@ -256,7 +300,56 @@ def create_contract_view(request):
 				MaxTemp=max_temp
 			)
 			
-			messages.success(request, f"Contract deployed successfully at: {contract_address}. Awaiting payment activation.")
+			# --- 6. ESCROW FEE PAYMENT (using Buyer's key from session) ---
+			buyer_private_key = request.session.get("user_PK")
+			buyer_address_from_user = request.user.m_address 
+
+			if not buyer_private_key:
+				messages.error(request, "Contract deployed. ERROR: Buyer private key not found in session. Escrow fee was NOT paid.")
+				return HttpResponseRedirect(reverse('active'))
+
+			DEPLOYER_ADDRESS, _ = get_deployer_key_and_address() # <--- DEPLOYER'S ADDRESS
+			
+			if buyer_address_from_user == DEPLOYER_ADDRESS:
+				messages.error(request, "CRITICAL ERROR: Buyer and Deployer addresses are identical. Cannot perform escrow transfer. Please log in as a different user.")
+				return HttpResponseRedirect(reverse('active'))
+			
+			amount_eth = FIXED_ESCROW_FEE_ETH
+			amount_wei = web3.to_wei(amount_eth, 'ether')
+			
+			if not web3.is_connected():
+				raise ConnectionError("Web3 not connected for escrow payment.")
+
+			nonce = web3.eth.get_transaction_count(buyer_address_from_user)
+			estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
+			
+			# --- ADJUSTED PRINT STATEMENTS ---
+			print(f"\n[{timezone.now()}] STARTING ESCROW PAYMENT (Contract Creation):")
+			print(f"  AMOUNT: {amount_eth} ETH (FIXED_ESCROW_FEE_ETH)")
+			print(f"  FROM (Buyer): {buyer_address_from_user}")
+			print(f"  TO (Deployer/Escrow): {DEPLOYER_ADDRESS}")
+			print(f"  CONTRACT SELLER ADDRESS: {seller_address}") # <-- NEW DEBUG LINE
+			
+			tx_data = {
+				'chainId': web3.eth.chain_id,
+				'from': buyer_address_from_user,
+				# The recipient is explicitly set to the DEPLOYER/ESCROW address
+				'to': DEPLOYER_ADDRESS, 
+				'nonce': nonce,
+				'value': amount_wei,
+				'maxFeePerGas': int(estimated_fees * 2),
+				'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
+				'gas': 21000 
+			}
+			
+			signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=buyer_private_key)
+			tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+			receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+
+			if receipt.status == 1:
+				messages.success(request, f"Contract deployed successfully at: {contract_address}. Escrow fee of {FIXED_ESCROW_FEE_ETH} ETH paid successfully (TX: {tx_hash.hex()}). Awaiting Seller activation.")
+			else:
+				raise Exception(f"Escrow fee payment failed on-chain. Contract deployed but unfunded.")
 			
 		except Product.DoesNotExist:
 			messages.error(request, "Selected product not found.")
@@ -297,6 +390,7 @@ def process_contract_action(request, contract_id):
 		
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] 2. Web3 Setup OK. Nonce: {nonce}. Deployer: {DEPLOYER_ADDRESS}")
 		
+		# --- Determine Action and Recipient ---
 		if action == 'complete':
 			recipient_address = contract_db.seller_address
 			contract_func = contract.functions.Deposit 
@@ -313,10 +407,14 @@ def process_contract_action(request, contract_id):
 			raise ValueError(f"Invalid contract action received: {action}")
 
 		# --- 4. Build and Sign Transaction ---
-		AMOUNT_TO_SEND = web3.to_wei(0.001, 'ether') # Placeholder for transaction execution
+		# NOTE: This placeholder value will need to be the full amount in escrow
+		# For now, we will use a small placeholder to demonstrate the function call
+		AMOUNT_TO_SEND = web3.to_wei(0.001, 'ether') 
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {web3.from_wei(AMOUNT_TO_SEND, 'ether')} ETH)")
+		
 		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
 		max_fee = int(estimated_fees * 2)
+		
 		tx_data = contract_func(recipient_address).build_transaction({
 			'chainId': web3.eth.chain_id,
 			'from': DEPLOYER_ADDRESS,
