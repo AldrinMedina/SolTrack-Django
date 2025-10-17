@@ -290,17 +290,58 @@ def overview_view(request):
 
     return render(request, "dashboard/overview.html", context)
 
-
+def get_products_by_seller(request, seller_id):
+    """
+    Fetches products associated with a specific seller ID and returns JSON.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Invalid method.'}, status=405)
+        
+    try:
+        # Query products where the foreign key 'seller' matches the seller_id (pk)
+        products = Product.objects.filter(seller__pk=seller_id, quantity_available__gt=0)
+        
+        # Serialize the products into a list of dictionaries for JSON response
+        product_list = list(products.values(
+            'product_id', 
+            'product_name', 
+            'price_eth', 
+            'max_temp', 
+            'quantity_available'
+        ))
+        
+        return JsonResponse({'products': product_list})
+        
+    except Exception as e:
+        # It's helpful to log the error to the console for debugging
+        print(f"Error fetching products for seller {seller_id}: {e}")
+        return JsonResponse({'error': 'Could not retrieve products.'}, status=500)
+        
 @login_required(login_url='login')
 def active_view(request):
+    sellers = CustomUser.objects.filter(role__iexact='seller')
     user_role = request.user.role
+    deployer_user = None
+    try:
+        # Fetch the Deployer who is the user with ID 10
+        deployer_user = CustomUser.objects.get(pk=10) 
+    except CustomUser.DoesNotExist:
+        # Fallback if user 10 is deleted, providing essential address information
+        deployer_user = type('Deployer', (object,), {
+            'organization': 'System Deployer (User Not Found)',
+            'm_address': '0x00...DeployerAddress...00' # Placeholder or use an environment variable if available
+        })
+    except Exception as e:
+         print(f"Error fetching Deployer (ID 10): {e}")    
     if request.user.role.lower() == "seller":
-     print("seller")
+      print("seller")
     if request.user.role.lower() == "buyer":
-     print("buyer")
+      print("buyer")
+    
     # --- Live Data Fetch from Supabase via Django ORM ---
     try:
-        contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit']).all()
+        contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit', 'Pending']).all() 
+        # Added 'Pending' contracts to queryset to show contracts waiting for activation
     except Exception as e:
         print(f"Database query error: {e}")
         contracts_queryset = []
@@ -313,10 +354,13 @@ def active_view(request):
         temp_threshold_float = contract_instance.max_temp
         
         # 2. Get/Mock the current temperature
-        current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float)
+        current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float) # Assuming _get_current_temp exists
         
         # 3. Determine status
-        if contract_instance.status == 'Ongoing':
+        if contract_instance.status == 'Pending':
+             status = 'Pending'
+             status_class = 'info'
+        elif contract_instance.status == 'Ongoing':
             status = 'Ongoing'
             status_class = 'info'
         elif contract_instance.status == 'In Transit':
@@ -326,6 +370,7 @@ def active_view(request):
             status = 'Active'
             status_class = 'success'
         
+        # NOTE: Only check temperature for Ongoing/In Transit, but leaving the logic as is:
         if current_temp_float > temp_threshold_float:
             status = 'Alert' 
             status_class = 'warning'
@@ -334,6 +379,8 @@ def active_view(request):
         active_contracts.append({
             'contract': contract_instance,
             
+            # NOTE: Switched to accessing 'buyer_address' and 'seller_address' directly 
+            # as the fields in Contract model seem to be addresses, and the view should handle fetching User objects if necessary.
             'buyer_name': contract_instance.buyer.full_name if contract_instance.buyer else "N/A",
             'seller_name': contract_instance.seller.full_name if contract_instance.seller else "N/A",
    
@@ -342,12 +389,30 @@ def active_view(request):
             'status_class': status_class,
         })
     
+    # --- NEW LOGIC: Fetch products if user is a Buyer ---
+    products = []
+    if user_role.lower() == "buyer":
+        try:
+            # Assuming the Product model is imported correctly (from dashboard.models import Product)
+            products = Product.objects.all()
+        except Exception as e:
+            print(f"Error fetching products: {e}")
+
+    sellers = []
+    if user_role.lower() == "buyer":
+        try:
+            # Fetch all users whose role is 'Seller'
+            sellers = CustomUser.objects.filter(role__iexact='seller') 
+        except Exception as e:
+            print(f"Error fetching sellers: {e}")
+
     context = {
         'contracts': active_contracts,
         'role': user_role,
-        'current_user': request.user
+        'current_user': request.user,
+        'sellers': sellers,
+        'deployer_user': deployer_user,
     }
-    
     return render(request, 'dashboard/active.html', context)
 
 

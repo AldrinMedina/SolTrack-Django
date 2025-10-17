@@ -32,7 +32,7 @@ set_solc_version('0.5.16')
 GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
 web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY") # Still needed for signing
-FIXED_ESCROW_FEE_ETH = 0.01
+FIXED_ESCROW_FEE_ETH = 5.00
 solidity_code = '''
 pragma solidity 0.5.16;
 
@@ -76,18 +76,22 @@ def activate_contract(request, contract_id):
 		return HttpResponseRedirect(reverse('active'))
 
 	try:
-		# --- 1. Retrieve Contract Data and Coords ---
 		contract_db = Contract.objects.get(contract_id=contract_id)		
-		sender_address = request.user.m_address 
-		sender_private_key = request.user.private_key 
-		
+		seller_address = request.user.m_address 
+		sender_address = contract_db.buyer_address 
 
+		try:
+			buyer_user = CustomUser.objects.get(m_address=sender_address)
+			sender_private_key = buyer_user.private_key
+		except CustomUser.DoesNotExist:
+			raise ValueError(f"Buyer address {sender_address} not found in CustomUser table. Cannot sign transaction.")			
 		if not sender_private_key:
-			raise ValueError("Current user (sender) does not have a private key in the database.")
+			raise ValueError("Buyer (sender) does not have a private key in the database.")
 			
 		escrow_address = DEPLOYER_ADDRESS 
-		seller_lat = request.POST.get('client_lat')
-		seller_lon = request.POST.get('client_lon')
+		
+		seller_lat = seller_user.latitude
+		seller_lon = seller_user.longitude
 		start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
 		
 		if not web3.is_connected():
@@ -100,12 +104,14 @@ def activate_contract(request, contract_id):
 		
 		print(f"\n[{timezone.now()}] STARTING ACTIVATION:")
 		print(f"  Total ETH: {total_eth_to_send} (Fixed: {FIXED_ESCROW_FEE_ETH} + Price: {price_eth})")
-		print(f"  Sender: {sender_address}")
+		print(f"  Sender (Buyer): {sender_address}")
+		print(f"  Recipient (Escrow): {escrow_address}")
+		
 		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
 
 		tx_data = {
 			'chainId': web3.eth.chain_id,
-			'from': sender_address, 
+			'from': sender_address, # Transaction 'from' the Buyer
 			'to': escrow_address, 
 			'nonce': nonce,
 			'value': amount_to_send_wei,
@@ -114,32 +120,30 @@ def activate_contract(request, contract_id):
 			'gas':  21000
 		}
 		
-
 		signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=sender_private_key) 
 		tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
 		receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
 		if receipt.status == 1:
-			print(f"[{timezone.now()}] SUCCESS: {total_eth_to_send} ETH transferred to escrow (Tx: {tx_hash.hex()})")
+			messages.success(request, f"Contract {contract_db.contract_id} successfully funded and shipment started.")
 		else:
 			raise Exception(f"Transaction failed on-chain. Status: {receipt.status}")
 
-		contract_db.status = 'Ongoing'
+		# Update status and start date/time (Seller/coords already set in deployment)
+		contract_db.status = 'Ongoing' 
 		contract_db.start_date = timezone.now()
-		contract_db.start_coord = start_coords_str
 		contract_db.save()
-		print(f"[{timezone.now()}] DATABASE UPDATE: Contract ID {contract_id} status updated to Ongoing.")
 		
 	except Contract.DoesNotExist:
-		print(f"[{timezone.now()}] ERROR: Contract ID {contract_id} not found.")
+		messages.error(request, f"Contract ID {contract_id} not found.")
 	except Exception as e:
-		print(f"[{timezone.now()}] UNEXPECTED ERROR during contract activation: {e}")
+		messages.error(request, f"Contract activation failed: {e}")
 		
 	return HttpResponseRedirect(reverse('active'))
 
-def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity, EndCoords):
+def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAmount, Quantity, EndCoords, StartCoords, MaxTemp):
 	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 
 	
-	print("--- Starting Contract Deployment Process ---")
+	print("--- Starting Contract Deployment Process (Pending Status) ---")
 	if not web3.is_connected():
 		print("ERROR: Web3 not connected. Check RPC URL and network status.")
 		raise ConnectionError("Could not connect to Ganache RPC endpoint.")
@@ -150,7 +154,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 	bytecode = contract_interface['bin']
 	SimpleTransfer = web3.eth.contract(abi=abi, bytecode=bytecode)
 
-	#prep and deploy
+	# prep and deploy
 	nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
 	print(f"1. Nonce for Deployment: {nonce}")
 	estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1] 
@@ -164,7 +168,6 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 		'gas':  4000000
 	})
 	
-
 	signed_txn = web3.eth.account.sign_transaction(
 		construct_txn, 
 		private_key=DEPLOYER_PRIVATE_KEY
@@ -177,65 +180,31 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 	contract_address = tx_receipt.contractAddress
 	print(f"4. Contract deployed successfully at: {contract_address}")
 	
-	contract = web3.eth.contract(address=contract_address, abi=abi)
-	amount_eth = 0.05 
-	amount_wei = web3.to_wei(amount_eth, 'ether')
 	
-	nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
-	print(f"5. Nonce for Refund: {nonce}")
-	
-	refund_txn = contract.functions.Refund(SellerAddress).build_transaction({
-		'chainId': web3.eth.chain_id, 
-		'from': DEPLOYER_ADDRESS, 
-		'nonce': nonce,
-		'value': amount_wei,
-		'maxFeePerGas': max_fee,
-		'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-		'gas':  100000
-	})
-	
-	signed_txn2 = web3.eth.account.sign_transaction(
-		refund_txn, 
-		private_key=DEPLOYER_PRIVATE_KEY
-	)
-	print("6. Refund transaction signed.")
-	tx_hash2 = web3.eth.send_raw_transaction(signed_txn2.raw_transaction)
-	print(f"7. Refund transaction sent. Hash: {tx_hash2.hex()}")
-
-	web3.eth.wait_for_transaction_receipt(tx_hash2) 
-	print("8. Refund transaction confirmed on chain.")
-
-	MAX_INT_VALUE = 2147483647
-	buyer_id_int = abs(hash(BuyerAddress)) % MAX_INT_VALUE
-	seller_id_int = abs(hash(SellerAddress)) % MAX_INT_VALUE
 	latest_contract = Contract.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
 	next_contract_id = (latest_contract or 0) + 1
-	print(f"10. Saving contract details to database (Attempting ID: {next_contract_id}).")
-	user = CustomUser.objects.get(m_address=BuyerAddress)
-	EndCoords = f"{user.latitude},{user.longitude}" 
+	print(f"5. Saving contract details to database (Attempting ID: {next_contract_id}).")
+
 	new_contract = Contract.objects.create(
 		contract_id=next_contract_id,
 		
 		buyer_address=BuyerAddress,
-		seller_address=SellerAddress,
+		seller_address=SellerAddress, # <-- NEW
 		
 		product_name=ProductName,
 		quantity=Quantity, 
 		price=PaymentAmount,
-		start_date=timezone.now(),
 		end_date=timezone.now() + timezone.timedelta(days=7),
 		
-		  
 		contract_address=contract_address,      
-		contract_abi=abi,
+		contract_abi=contract_interface['abi'], 
 		
-		max_temp=5.0, 
-		status='Active',
-		end_coord=EndCoords,
-		
+		max_temp=MaxTemp, 
+		status='Pending', # Remains Pending (awaiting funding)
+		end_coord=EndCoords, 
+		start_coord=StartCoords, # <-- NEW
 	)
-	print("11. Database save complete. Process SUCCESSFUL.")
-	
+	print("6. Database save complete. Process SUCCESSFUL. Status: Pending.")
 	
 	return contract_address
 
@@ -243,48 +212,63 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, ProductName, PaymentAm
 def create_contract_view(request):
 	if request.method == 'POST':
 		try:
-			
+			# 1. Get data from POST
 			buyer = request.user 
-			buyer_address = request.POST.get('buyer_address')
-			seller_address_from_form = request.POST.get('seller_address')
-			try:
-				seller = CustomUser.objects.get(m_address=seller_address_from_form)
-			except CustomUser.DoesNotExist:
-				print(f"error address '{seller_address_from_form}' not found")
-				messages.error(request, f"Seller address '{seller_address_from_form}' not found.")
-				return HttpResponseRedirect(reverse('active'))
-			seller_address = seller.m_address
-			product_name = request.POST.get('product_name')
+			buyer_address = request.POST.get('buyer_address') 
 			
-			payment_amount = float(request.POST.get('payment_amount'))
+			# Seller selection
+			selected_seller_id = request.POST.get('selected_seller') 
+			
+			product_id = request.POST.get('selected_product') 
 			quantity = int(request.POST.get('quantity'))
+
+			if quantity <= 0:
+				messages.error(request, "Quantity must be a positive number.")
+				return HttpResponseRedirect(reverse('active'))
+
+			# 2. Fetch Product data
+			product = Product.objects.get(product_id=product_id)
+			product_name = product.product_name
+			payment_amount = product.price_eth * quantity
+			max_temp = product.max_temp
+			
+			# 3. Fetch Seller data
+			seller_user = CustomUser.objects.get(pk=selected_seller_id, role__iexact='seller')
+			seller_address = seller_user.m_address
+			seller_lat = seller_user.latitude 
+			seller_lon = seller_user.longitude
+			start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
+
+			# 4. Get Buyer's Coordinates (EndCoords)
 			buyer_lat = buyer.latitude 
 			buyer_lon = buyer.longitude
 			end_coords_str = f"{buyer_lat},{buyer_lon}" if buyer_lat and buyer_lon else None
+			
+			# 5. Deploy Contract
 			contract_address = deploy_contract_and_save(
-				buyer_address, 
-				seller_address, 
-				product_name, 
-				payment_amount,
-				quantity,
-				end_coords_str 
+				BuyerAddress=buyer_address, 
+				SellerAddress=seller_address, 
+				ProductName=product_name, 
+				PaymentAmount=payment_amount,
+				Quantity=quantity,
+				EndCoords=end_coords_str,
+				StartCoords=start_coords_str, 
+				MaxTemp=max_temp
 			)
 			
-			print(f"Contract deployed successfully at: {contract_address}")
+			messages.success(request, f"Contract deployed successfully at: {contract_address}. Awaiting payment activation.")
 			
+		except Product.DoesNotExist:
+			messages.error(request, "Selected product not found.")
+		except CustomUser.DoesNotExist:
+			messages.error(request, "Selected seller not found or invalid.")
 		except Exception as e:
 			print(f"Contract Creation Error: {e}")
+			messages.error(request, f"Contract creation failed: {e}")
 			
 		return HttpResponseRedirect(reverse('active')) 
 	
 	return HttpResponseRedirect(reverse('active'))
-
-
-
-
-
-
-
 
 def process_contract_action(request, contract_id):
 	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 

@@ -26,6 +26,6 @@ from .main_view import (
 	shipment_details_view,
 	completed_view,
 	alerts_view,
-	download_license
-
+	download_license,
+	get_products_by_seller
 )
