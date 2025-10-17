@@ -12,6 +12,7 @@ urlpatterns = [
     path('ongoing/', views.ongoing_view, name='ongoing'),
     path('ongoing/data/', views.ongoing_data_json, name='ongoing_data_json'),
     path('ongoing/<int:contract_id>/details/', views.shipment_details_view, name='shipment_details'),
+    path('contracts/complete/<int:contract_id>/', views.complete_shipment, name='complete_shipment'),
     
     path('completed/', views.completed_view, name='completed'),
     path('completed/<int:contract_id>/', views.download_contract_report, name='download_contract_report'),

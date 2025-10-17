@@ -26,6 +26,23 @@ function updateTimestamp() {
 
 setInterval(updateTimestamp, 30000); // Update every 30 seconds
 
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+
 // Real-time temperature chart
 const chartElement = document.getElementById('chartData');
 const chartCanvas = document.getElementById('temperatureChart');
@@ -297,9 +314,14 @@ function updateOngoingShipments() {
                         <td class="px-4 py-3">${shipment.buyer_name || '—'}</td>
                         <td class="px-4 py-3">${shipment.seller_name || '—'}</td>
                         <td class="px-4 py-3">
-                            <button class="btn btn-sm btn-outline-primary view-shipment" data-id="${shipment.contract_id}">
-                                <i class="bi bi-eye"></i>
-                            </button>
+                            <div class="d-flex gap-2 btn-group">
+                                <button class="btn btn-sm btn-outline-primary view-shipment" data-id="${shipment.contract_id}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success complete-shipment" data-id="${shipment.contract_id}">
+                                    Complete
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -349,6 +371,31 @@ document.addEventListener('click', function(e) {
                 modal.show();
             })
             .catch(err => console.error(err));
+    }
+});
+
+document.addEventListener('click', function(e) {
+    const button = e.target.closest('.complete-shipment');
+    if (button) {
+        const id = button.dataset.id;
+        if (confirm(`Mark shipment #${id} as completed? This action cannot be undone.`)) {
+            fetch(COMPLETE_SHIPMENT_URL.replace('0', id), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to complete shipment');
+                return res.json();
+            })
+            .then(data => {
+                alert(data.message || 'Shipment marked as completed.');
+                updateOngoingShipments();
+            })
+            .catch(err => console.error(err));
+        }
     }
 });
 

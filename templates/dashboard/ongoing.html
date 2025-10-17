@@ -54,9 +54,14 @@
                             <td class="px-4 py-3">{{ shipment.buyer_name }}</td>
                             <td class="px-4 py-3">{{ shipment.seller_name }}</td>
                             <td class="px-4 py-3">
-                                <button class="btn btn-sm btn-outline-primary view-shipment" data-id="{{ shipment.contract_id }}">
-                                    <i class="bi bi-eye"></i>
-                                </button>
+                                <div class="d-flex gap-2 btn-group">
+                                    <button class="btn btn-sm btn-outline-primary view-shipment" data-id="{{ shipment.contract_id }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success complete-shipment" data-id="{{ shipment.contract_id }}">
+                                        Complete
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
