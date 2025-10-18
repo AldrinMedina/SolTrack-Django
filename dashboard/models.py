@@ -131,3 +131,6 @@ class Product(models.Model):
         managed = False  # Prevent Django from managing this table
     def __str__(self):
         return f"{self.product_name} ({self.seller.full_name})"
+    
+
+

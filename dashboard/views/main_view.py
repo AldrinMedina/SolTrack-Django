@@ -1,26 +1,15 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.utils import timezone 
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-from django.db import models
-from django.db.models import Avg, Min, Max, Q
+from django.core.cache import cache
+from django.db.models import Avg, Count, Q
 from django.http import HttpResponse, Http404, JsonResponse
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
-from reportlab.platypus import KeepTogether
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-
-import random 
 import json 
 from datetime import datetime
 from web3 import Web3
-from solcx import compile_source, install_solc, set_solc_version
 
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
 from accounts.models import CustomUser
@@ -127,28 +116,7 @@ def _check_delivery_status(contract_db):
 
     # Return progress percentage and status string
     return progress_percent, f"{progress_percent:.0f}%"
-def get_latest_temperature(contract):
-    """
-    Retrieves the latest temperature reading for a contract's assigned IoT device.
-    """
-    if not hasattr(contract, 'IoT_Assigned') or not contract.IoT_Assigned:
-        return 'N/A'
-    
-    device_id = contract.IoT_Assigned.device_id
-    
-    try:
-        latest_data = IoTData.objects.filter(
-            device_id=device_id
-        ).order_by('-recorded_at').only('temperature').first()
-        
-        if latest_data and latest_data.temperature is not None:
-            return f"{latest_data.temperature:.1f}"
-        
-        return 'No Data'
-        
-    except Exception as e:
-        print(f"Error fetching temperature for device {device_id}: {e}")
-        return 'Error'
+
 def _get_live_iot_data():
   
     if aio is None:
@@ -187,49 +155,73 @@ def _get_current_temp(threshold_float):
 
 
 def dashboard_data(request):
+    """Return optimized dashboard metrics as JSON."""
+
     user = request.user
     user_role = request.session.get("user_role", "").lower()
     user_id = request.session.get("user_id")
-    # Filter contracts based on user role
-    if user_role.lower() == "buyer":
-        contracts = Contract.objects.filter(buyer_id=user_id)
-    elif user_role.lower() == "seller":
-        contracts = Contract.objects.filter(seller_id=user_id)
-    else:
-        contracts = Contract.objects.all()
 
-    # Contract stats
-    total_contracts = contracts.count()
-    active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
-    ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
-    completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+    # --- CACHE LAYER (30 seconds to reduce load) ---
+    cache_key = f"dashboard_stats_{user_role}_{user_id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached)
 
-    # 🌡️ IoT Data (real-time readings)
-    devices = IoTDevice.objects.filter(contract__in=contracts)
-    iot_data = IoTData.objects.filter(device__in=devices)
+    # --- Base Query ---
+    base_filter = {}
+    if user_role == "buyer":
+        base_filter["buyer_id"] = user_id
+    elif user_role == "seller":
+        base_filter["seller_id"] = user_id
 
-    avg_temp = iot_data.aggregate(avg=Avg("temperature"))["avg"] or 0
-    total_records = iot_data.count()
+    # Preload buyer/seller to prevent extra queries
+    contracts = (
+        Contract.objects.filter(**base_filter)
+        .select_related("buyer", "seller")
+        .defer("contract_abi")  # avoid loading large JSON field
+    )
 
-    # Optional: define “Normal” temperature range (e.g., 2°C to 8°C)
-    normal_records = iot_data.filter(temperature__range=(2, 8)).count()
-    success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
+    # --- Contract Stats (1 aggregate query instead of 4 counts) ---
+    stats = contracts.aggregate(
+        total=Count("contract_id"),
+        active=Count("contract_id", filter=Q(status__in=["Active", "Ongoing", "In Transit"])),
+        ongoing=Count("contract_id", filter=Q(status__in=["In Transit", "Ongoing"])),
+        completed=Count("contract_id", filter=Q(status__in=["Completed", "Delivered"]))
+    )
+    total_contracts = stats.get("total", 0)
+    active_contracts = stats.get("active", 0)
+    ongoing_contracts = stats.get("ongoing", 0)
+    completed_contracts = stats.get("completed", 0)
 
-    # 🚨 Alerts
-    active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
+    # --- IoT and Alerts Stats ---
+    avg_temp = (
+        IoTDataHistory.objects.filter(contract__in=contracts)
+        .aggregate(avg=Avg("avg_temp"))
+        .get("avg") or 0
+    )
+
+    total_records = IoTDataHistory.objects.filter(contract__in=contracts).count()
+    normal_records = IoTDataHistory.objects.filter(contract__in=contracts, result="Normal").count()
+    success_rate = round((normal_records / total_records) * 100, 1) if total_records else 0
+
+    active_alerts = Alert.objects.filter(
+        device__contract__in=contracts, status="Active"
+    ).count()
+
     system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
     status_color = "bg-success" if active_alerts == 0 else "bg-danger"
 
-
-    # 📈 Chart data (latest 10 readings)
-    temp_history = (
-        iot_data.order_by("-recorded_at")[:10]
-        .values_list("recorded_at", "temperature")
+    # --- Temperature History (latest 10 readings) ---
+    temp_history_qs = (
+        IoTDataHistory.objects.filter(contract__in=contracts)
+        .order_by("-recorded_at")[:10]
     )
+    temp_history = list(temp_history_qs.values_list("recorded_at", "avg_temp"))
     chart_labels = [t[0].strftime("%H:%M") for t in reversed(temp_history)]
     chart_values = [t[1] for t in reversed(temp_history)]
 
-    return JsonResponse({
+    # --- Prepare response ---
+    result = {
         "total_contracts": total_contracts,
         "active_contracts": active_contracts,
         "ongoing_contracts": ongoing_contracts,
@@ -241,7 +233,10 @@ def dashboard_data(request):
         "chart_values": chart_values,
         "system_status": system_status,
         "status_color": status_color,
-    })
+    }
+
+    cache.set(cache_key, result, 30)  # cache for 30 seconds
+    return JsonResponse(result)
 
 
 
@@ -609,6 +604,89 @@ def shipment_details_view(request, contract_id):
     }
 
     return JsonResponse(data)
+
+@login_required(login_url='login')
+@require_POST
+def complete_shipment(request, contract_id):
+    try:
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+        else:
+            # Should not happen with the provided JS, but for robustness
+            return JsonResponse({'status': 'error', 'message': 'Invalid Content-Type'}, status=400)
+
+        # 1. Fetch Contract from DB
+        contract_db = Contract.objects.get(contract_id=contract_id)
+        
+        # Security Check: Only the buyer should finalize the contract
+        user_role = request.user.role.lower()
+        if user_role != 'buyer':
+             return JsonResponse({'status': 'error', 'message': 'Permission denied. Only the Buyer can complete the contract.'}, status=403)
+        
+        # Get necessary info
+        contract_address = contract_db.contract_address
+        contract_abi = contract_db.contract_abi
+
+        # 2. Web3 setup
+        if not web3.is_connected():
+            raise ConnectionError("Web3 provider not connected.")
+        
+        # Load the contract instance
+        contract_instance = web3.eth.contract(address=contract_address, abi=contract_abi)
+        
+        # Load the account used to sign the transaction (The Buyer's account)
+        buyer_wallet = request.user.eth_address
+        buyer_private_key = request.user.eth_private_key
+        buyer_account = Account.from_key(buyer_private_key)
+
+        # 3. Build and sign the transaction to call the 'releasePayment' function
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 1. Calling releasePayment on contract {contract_address} from buyer {buyer_wallet}...")
+        
+        
+
+        gas_estimate = contract_instance.functions.releasePayment().estimate_gas({'from': buyer_wallet})
+        
+        transaction = contract_instance.functions.releasePayment().build_transaction({
+            'from': buyer_wallet,
+            'nonce': web3.eth.get_transaction_count(buyer_wallet),
+            'gas': gas_estimate + 10000, # Add buffer
+            'gasPrice': web3.eth.gas_price
+        })
+
+        signed_txn = web3.eth.account.sign_transaction(transaction, private_key=buyer_private_key)
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Sending signed transaction...")
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 5. Tx submitted. Hash: {tx_hash.hex()}")
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] -> Waiting for transaction receipt...")
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        if receipt.status == 1:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 6. SUCCESS: Payment released. Block: {receipt.blockNumber}")
+        else:
+            raise ContractLogicError(f"Transaction failed on-chain. Status: {receipt.status}")
+
+        # 4. Update Django DB Status to 'Completed' (Assuming the current status is 'ongoing')
+        contract_db.status = 'Completed'
+        contract_db.end_date = timezone.now()
+        contract_db.save()
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 7. DATABASE UPDATE: Contract ID {contract_id} status updated to Completed.")
+
+        return JsonResponse({'status': 'success', 'message': 'Payment released and contract completed.'})
+    except Contract.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': f'Contract ID {contract_id} not found in database.'}, status=404)
+    except ConnectionError:
+        return JsonResponse({'status': 'error', 'message': 'Critical error: Web3 provider connection failed.'}, status=503)
+    except ContractLogicError as e:
+        # This captures a failure in the smart contract itself (e.g., require() statement failed)
+        error_message = str(e).split("reason: '")[-1].split("'")[0] if "reason" in str(e) else "Smart contract transaction failed."
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Contract Logic Failed. Details: {error_message}")
+        return JsonResponse({'status': 'error', 'message': f'Contract failed on the blockchain: {error_message}'}, status=400)
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] UNEXPECTED ERROR: {e}")
+        return JsonResponse({'status': 'error', 'message': f'An unexpected error occurred: {str(e)}'}, status=500) 
+    
 
 @login_required(login_url='login')
 def completed_view(request):

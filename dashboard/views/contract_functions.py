@@ -54,6 +54,28 @@ emit Transfer(msg.sender, _to, msg.value);
 }
 '''
 
+def get_latest_temperature(contract):
+    """
+    Retrieves the latest temperature reading for a contract's assigned IoT device.
+    """
+    if not hasattr(contract, 'IoT_Assigned') or not contract.IoT_Assigned:
+        return 'N/A'
+    
+    device_id = contract.IoT_Assigned.device_id
+    
+    try:
+        latest_data = IoTData.objects.filter(
+            device_id=device_id
+        ).order_by('-recorded_at').only('temperature').first()
+        
+        if latest_data and latest_data.temperature is not None:
+            return f"{latest_data.temperature:.1f}"
+        
+        return 'No Data'
+        
+    except Exception as e:
+        print(f"Error fetching temperature for device {device_id}: {e}")
+        return 'Error'
       
 def get_contract_temperature(request, contract_id):
     """
