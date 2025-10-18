@@ -260,7 +260,8 @@ def create_contract_view(request):
 			# 1. Get data from POST
 			buyer = request.user 
 			buyer_address = request.POST.get('buyer_address') 
-			
+			print(f"DEBUG: Buyer Key in Session: {request.session.get('user_PK') is not None}")	
+
 			# Seller selection
 			selected_seller_id = request.POST.get('selected_seller') 
 			

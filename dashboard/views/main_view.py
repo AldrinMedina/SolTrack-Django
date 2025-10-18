@@ -360,7 +360,9 @@ def active_view(request):
     # --- END OF REPLACEMENT BLOCK ---
 
     user_role = getattr(request.user, 'role', '').lower()
-    
+    print(request.session.get("user_PK"))
+    print(request.session.get("m_address"))
+
     if user_role == "buyer":
      contracts_base_query = Contract.objects.filter(buyer_address=request.user.m_address)
     elif user_role == "seller":
