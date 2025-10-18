@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.db import models
+from decimal import Decimal
 from django.db.models import Avg, Min, Max
 from django.http import HttpResponse, Http404, JsonResponse
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
@@ -54,7 +55,7 @@ emit Transfer(msg.sender, _to, msg.value);
 }
 '''
 
-      
+
 def get_contract_temperature(request, contract_id):
     """
     API endpoint to fetch the latest temperature for a single ongoing contract.
@@ -365,18 +366,23 @@ def create_contract_view(request):
 
 def process_contract_action(request, contract_id):
 	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 
-	
+	action = request.POST.get('action')
 
 	if request.method != 'POST':
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Invalid request method {request.method} for contract ID {contract_id}.")
 		return HttpResponseRedirect(reverse('active'))
 
-	action = request.POST.get('action') 
 	print(f"[{datetime.now().strftime('%H:%M:%S')}] STARTING ACTION: {action.upper()} for Contract ID: {contract_id}")
 
 	try:
 		#get contract info
 		contract_db = Contract.objects.get(contract_id=contract_id)		
+		amount_eth = Decimal(contract_db.price)
+		AMOUNT_TO_SEND = web3.to_wei(amount_eth, 'ether')
+		
+		# Safety check to prevent issues with payable functions requiring value > 0
+		if AMOUNT_TO_SEND == 0:
+			raise ValueError("Contract price is zero. Cannot perform payment action.")
 		contract_address = contract_db.contract_address
 		contract_abi = contract_db.contract_abi 		
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] -> DB Retrieved. Contract Address: {contract_address}")
@@ -409,9 +415,9 @@ def process_contract_action(request, contract_id):
 		# --- 4. Build and Sign Transaction ---
 		# NOTE: This placeholder value will need to be the full amount in escrow
 		# For now, we will use a small placeholder to demonstrate the function call
-		AMOUNT_TO_SEND = web3.to_wei(0.001, 'ether') 
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {web3.from_wei(AMOUNT_TO_SEND, 'ether')} ETH)")
 		
+			
+		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {amount_eth} ETH)") # <-- Now prints the actual price
 		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
 		max_fee = int(estimated_fees * 2)
 		

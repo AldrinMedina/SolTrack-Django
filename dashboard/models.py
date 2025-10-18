@@ -6,7 +6,14 @@ class Contract(models.Model):
     contract_id = models.IntegerField(primary_key=True) 
     buyer_address = models.CharField(max_length=42)
     seller_address = models.CharField(max_length=42)
-
+    IoT_Assigned = models.ForeignKey(
+        'IoTDevice', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='shipments',
+        db_column='IoT_Assigned'
+    )
     # Matches DB: VARCHAR(100)
     product_name = models.CharField(max_length=100) 
     # Matches DB: INT

@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.utils import timezone 
 from django.http import HttpResponseRedirect
@@ -63,7 +64,33 @@ aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
 
 DELIVERY_THRESHOLD_KM = 0.010 # Distance threshold to mark destination reached
 DELIVERY_COOLDOWN_SECONDS = 180 # 3 minutes (3 * 60)
-
+def get_products_by_seller(request, seller_id):
+    """
+    Fetches products associated with a specific seller ID and returns JSON.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Invalid method.'}, status=405)
+        
+    try:
+        # Query products where the foreign key 'seller' matches the seller_id (pk)
+        products = Product.objects.filter(seller__pk=seller_id, quantity_available__gt=0)
+        
+        # Serialize the products into a list of dictionaries for JSON response
+        product_list = list(products.values(
+            'product_id', 
+            'product_name', 
+            'price_eth', 
+            'max_temp', 
+            'quantity_available'
+        ))
+        
+        return JsonResponse({'products': product_list})
+        
+    except Exception as e:
+        # It's helpful to log the error to the console for debugging
+        print(f"Error fetching products for seller {seller_id}: {e}")
+        return JsonResponse({'error': 'Could not retrieve products.'}, status=500)
+        
 def haversine(lat1, lon1, lat2, lon2):
     """Calculates the distance between two points on Earth in kilometers."""
     R = 6371.0 # Radius of Earth in kilometers
@@ -310,129 +337,92 @@ def overview_view(request):
 
     return render(request, "dashboard/overview.html", context)
 
-def get_products_by_seller(request, seller_id):
-    """
-    Fetches products associated with a specific seller ID and returns JSON.
-    """
-    if request.method != 'GET':
-        return JsonResponse({'error': 'Invalid method.'}, status=405)
-        
-    try:
-        # Query products where the foreign key 'seller' matches the seller_id (pk)
-        products = Product.objects.filter(seller__pk=seller_id, quantity_available__gt=0)
-        
-        # Serialize the products into a list of dictionaries for JSON response
-        product_list = list(products.values(
-            'product_id', 
-            'product_name', 
-            'price_eth', 
-            'max_temp', 
-            'quantity_available'
-        ))
-        
-        return JsonResponse({'products': product_list})
-        
-    except Exception as e:
-        # It's helpful to log the error to the console for debugging
-        print(f"Error fetching products for seller {seller_id}: {e}")
-        return JsonResponse({'error': 'Could not retrieve products.'}, status=500)
+
         
 @login_required(login_url='login')
 def active_view(request):
-    sellers = CustomUser.objects.filter(role__iexact='seller')
-    user_role = request.user.role.lower() 
-    print ( request.session.get('m_address'))
-    deployer_user = None
     try:
-        # Fetch the Deployer who is the user with ID 10
-        deployer_user = CustomUser.objects.get(pk=10) 
-    except CustomUser.DoesNotExist:
-        # Fallback if user 10 is deleted, providing essential address information
-        deployer_user = type('Deployer', (object,), {
-            'organization': 'System Deployer (User Not Found)',
-            'm_address': '0x00...DeployerAddress...00' # Placeholder or use an environment variable if available
-        })
+        # Most common filter: 'role' field exists and value is 'seller' (case-insensitive)
+        sellers = CustomUser.objects.filter(
+            role__iexact='seller'
+        ).exclude(
+            pk=request.user.pk
+        )
+        
+        # ADDED PRINT STATEMENT FOR DEBUGGING
+        print(f"DEBUG: Sellers found with role__iexact='seller': {sellers.count()}")
+        
     except Exception as e:
-         print(f"Error fetching Deployer (ID 10): {e}")    
-    if request.user.role.lower() == "seller":
-      print("seller")
-    if request.user.role.lower() == "buyer":
-      print("buyer")
-    
-    # --- Live Data Fetch from Supabase via Django ORM ---
-    try:
-        contracts_queryset = Contract.objects.filter(status__in=['Active', 'Ongoing', 'In Transit', 'Pending']).all() 
-        # Added 'Pending' contracts to queryset to show contracts waiting for activation
-    except Exception as e:
-        print(f"Database query error: {e}")
-        contracts_queryset = []
+        # This catches an error if the 'role' field is named something else.
+        print(f"CRITICAL ERROR: Failed to query CustomUser roles. Check CustomUser model. Error: {e}")
+        sellers = CustomUser.objects.none() # Fallback to an empty queryset
+        
+    # --- END OF REPLACEMENT BLOCK ---
 
-    active_contracts = []
+    user_role = getattr(request.user, 'role', '').lower()
     
+    if user_role == "buyer":
+     contracts_base_query = Contract.objects.filter(buyer_address=request.user.m_address)
+    elif user_role == "seller":
+     contracts_base_query = Contract.objects.filter(seller_address=request.user.m_address)
+
+    # 2. Status Filter: Only show contracts for the 'Active' tab.
+    # Includes 'Pending' (activatable), 'Active', 'Ongoing', and 'In Transit'.
+    contracts_queryset = contracts_base_query.filter(
+        status__in=['Pending', 'Active', 'Ongoing', 'In Transit']
+    ).order_by('-start_date')
+    try:
+     sellers = CustomUser.objects.filter(
+       role__iexact='seller'
+     ).exclude(
+       pk=request.user.pk
+     )
+    except Exception as e:
+    # Print error if the 'role' field does not exist on CustomUser
+      print(f"ERROR fetching sellers: {e}")
+      sellers = []
+    
+    # Add this print statement back to verify the query result
+    print(f"Contracts Queryset Count: {contracts_queryset.count()}") 
+
+    # 3. Assemble Context Data (simplified for clarity)
+    active_contracts = []
     for contract_instance in contracts_queryset:
-        
-        # 1. Get the temperature threshold (now a FloatField from the DB)
-        temp_threshold_float = contract_instance.max_temp
-        
-        # 2. Get/Mock the current temperature
-        current_temp_str, current_temp_float = _get_current_temp(temp_threshold_float) # Assuming _get_current_temp exists
-        
-        # 3. Determine status
+        # Check if buyer/seller fields are populated before accessing full_name
+        buyer_name = getattr(contract_instance.buyer, 'full_name', contract_instance.buyer_address)
+        seller_name = getattr(contract_instance.seller, 'full_name', contract_instance.seller_address)
+
         status = contract_instance.status
-        status_class = 'primary' # Default color
+        status_class = 'warning' if status == 'Pending' else 'info'
         
-        if status == 'Pending':
-            # Pending status should not trigger temperature check
-            status_class = 'warning'
-        elif status in ['Ongoing', 'In Transit', 'Active']:
-            status_class = 'info'
-            # Only check temperature deviation for actively tracked contracts
-            if current_temp_float > temp_threshold_float:
-                status = 'Temp Alert' # Changed from 'Alert' to 'Temp Alert' for clarity
-                status_class = 'danger' # Use danger for temp alert
-        else:
-             # Fallback for any other 'active' state not explicitly handled
-             status_class = 'secondary'
-        
-        # 4. Assemble final data object
-        buyer_name = contract_instance.buyer.full_name if contract_instance.buyer and contract_instance.buyer.full_name else contract_instance.buyer_address
-        seller_name = contract_instance.seller.full_name if contract_instance.seller and contract_instance.seller.full_name else contract_instance.seller_address
+        # Mock temperature for display
+        temp_threshold_float = getattr(contract_instance, 'max_temp', 8.0)
+        current_temp_str, _ = _get_current_temp(temp_threshold_float) 
+
         active_contracts.append({
-            'contract': contract_instance,
-            
-            # Use the derived names (which fall back to addresses)
+            'contract': contract_instance, # Contains .pk, .product_name, .quantity
             'buyer_name': buyer_name,
             'seller_name': seller_name,
-   
             'current_temp': current_temp_str, 
             'status': status,
             'status_class': status_class,
         })
     
-    # --- NEW LOGIC: Fetch products if user is a Buyer ---
-    products = []
-    if user_role.lower() == "buyer":
-        try:
-            # Assuming the Product model is imported correctly (from dashboard.models import Product)
-            products = Product.objects.all()
-        except Exception as e:
-            print(f"Error fetching products: {e}")
-
-    sellers = []
-    if user_role.lower() == "buyer":
-        try:
-            # Fetch all users whose role is 'Seller'
-            sellers = CustomUser.objects.filter(role__iexact='seller') 
-        except Exception as e:
-            print(f"Error fetching sellers: {e}")
-
+    # 4. IoT Device Filter
+    ready_iot_devices = IoTDevice.objects.filter(status='Available')
+    
     context = {
         'contracts': active_contracts,
         'role': user_role,
+        'iot_available': ready_iot_devices.exists(),
+        'ready_iot_devices': ready_iot_devices,
+        "sellers": sellers,
         'current_user': request.user,
-        'sellers': sellers,
-        'deployer_user': deployer_user,
     }
+    
+    # Add this print statement back to check the final context
+    print(f"Final Context: {context['contracts'][:1]}") 
+    
     return render(request, 'dashboard/active.html', context)
 
 
@@ -518,9 +508,11 @@ def ongoing_view(request):
         ongoing_data.append({
             'contract_id': contract.contract_id,
             'product_name': contract.product_name,
-            # ... other contract fields
+          
             'status': contract.status,
             'max_temp': contract.max_temp,
+            'buyer_address': contract.buyer_address,
+            'seller_address': contract.seller_address,
             'current_temp': current_temp, # Now correctly populated
         })
 
@@ -562,8 +554,10 @@ def ongoing_data_json(request):
             "status": contract.status,
             "min_temp": contract.min_temp,
             "max_temp": contract.max_temp,
-            "buyer_name": contract.buyer.full_name if hasattr(contract.buyer, 'full_name') else "—",
-            "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else "—",
+            "buyer_address": contract.buyer_address,
+            "seller_address": contract.seller_address,
+            #"buyer_name": contract.buyer. if hasattr(contract.buyer, 'full_name') else "—",
+           # "seller_name": contract.seller.full_name if hasattr(contract.seller, 'full_name') else "—",
         })
 
     return JsonResponse({"ongoing_data": ongoing_data_list})

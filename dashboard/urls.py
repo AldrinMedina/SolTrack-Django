@@ -24,5 +24,9 @@ urlpatterns = [
     path("products/edit/<int:pk>/", views.product_edit_view, name="product_edit"),
     path("products/delete/<int:pk>/", views.product_delete_view, name="product_delete"),
     path('get-products/<int:seller_id>/', views.get_products_by_seller, name='get_products_by_seller'),
-]
-
+    path('contract/<int:contract_id>/activate/', views.contract_functions.activate_contract, name='activate_contract'),
+    path('api/contract/<int:contract_id>/temperature/', views.contract_functions.get_contract_temperature, name='contract_temp_api'),
+    path('process_contract_action/<int:contract_id>/', views.contract_functions.process_contract_action, name='process_contract_action'),    
+    path('ongoing/<int:contract_id>/details/', views.shipment_details_view, name='shipment_details'),
+    path('api/products-by-seller/<int:seller_pk>/', views.get_products_by_seller, name='get_products_by_seller'),   
+    ]
