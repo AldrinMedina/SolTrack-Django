@@ -1,3 +1,4 @@
+
 {% extends 'base.html' %}
 {% load static %}
 
@@ -28,41 +29,64 @@
                     </thead>
                     <tbody>
                         {% for shipment in ongoing_data %}
-                        <tr>
+                        <tr data-contract-id="{{ shipment.contract_id }}">
                             <td class="px-4 py-3"><span class="fw-medium text-dark">#{{ shipment.contract_id }}</span></td>
-                            <td class="px-4 py-3"><span class="fw-bold text-dark">{{ shipment.product_name }}</span></td>
+                            <td class="px-4 py-3">{{ shipment.product_name }}</td>
+                            
                             <td class="px-4 py-3">
-                                {% if shipment.temperature == "N/A" %}
-                                    <span class="badge bg-secondary px-2 py-1">No Data</span>
-                                {% else %}
-                                    {% if shipment.temperature|floatformat:1 < shipment.threshold|floatformat:1 %}
-                                        <span class="fs-6 fw-bold text-warning">{{ shipment.temperature }}</span>
-                                    {% else %}
-                                        <span class="fs-6 fw-bold text-success">{{ shipment.temperature }}</span>
-                                    {% endif %}
+                                <span class="fw-bold temp-display" 
+                                    data-contract-id="{{ shipment.contract_id }}"
+                                    data-max-temp="{{ shipment.max_temp }}"
+                                    data-min-temp="{{ shipment.min_temp }}"
+                                >
+                                    {{ shipment.current_temp }} °C
+                                </span>
+                                {% if shipment.max_temp %}
+                                <small class="text-muted d-block">Max: {{ shipment.max_temp }} °C</small>
                                 {% endif %}
                             </td>
+
                             <td class="px-4 py-3">
-                                {% if shipment.status == "In Transit" %}
-                                    <span class="badge bg-info text-dark px-3 py-2 rounded-pill">{{ shipment.status }}</span>
-                                {% elif shipment.status == "Delivered" %}
-                                    <span class="badge bg-success px-3 py-2 rounded-pill">{{ shipment.status }}</span>
+                                {% if shipment.status == 'Ongoing' %}
+                                <span class="badge bg-success-subtle text-success">{{ shipment.status }}</span>
+                                {% elif shipment.status == 'Alert' %}
+                                <span class="badge bg-danger-subtle text-danger">{{ shipment.status }}</span>
                                 {% else %}
-                                    <span class="badge bg-secondary px-3 py-2 rounded-pill">{{ shipment.status }}</span>
+                                <span class="badge bg-secondary-subtle text-secondary">{{ shipment.status }}</span>
                                 {% endif %}
-                            </td>
-                            <td class="px-4 py-3">{{ shipment.buyer_name }}</td>
-                            <td class="px-4 py-3">{{ shipment.seller_name }}</td>
-                            <td class="px-4 py-3">
-                                <button class="btn btn-sm btn-outline-primary view-shipment" data-id="{{ shipment.contract_id }}">
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                            </td>
+                                </td>
+                                <td class="px-4 py-3 text-truncate" title="{{ shipment.buyer_address }}">
+        <span class="small">{{ shipment.buyer_address|truncatechars:10 }}...</span>
+    </td>
+    
+    <td class="px-4 py-3 text-truncate" title="{{ shipment.seller_address }}">
+        <span class="small">{{ shipment.seller_address|truncatechars:10 }}...</span>
+    </td>
+         <td class="px-4 py-3">
+    <form method="POST" action="{% url 'process_contract_action' contract_id=shipment.contract_id %}" style="display: inline;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="complete">
+        <button type="submit" class="btn btn-sm btn-success finalize-btn">
+            Complete
+        </button>
+    </form>
+
+    <form method="POST" action="{% url 'process_contract_action' contract_id=shipment.contract_id %}" style="display: inline;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="refund">
+        <button type="submit" class="btn btn-sm btn-warning finalize-btn">
+            Request Refund
+        </button>
+    </form>
+    
+    <a href="{% url 'shipment_details' contract_id=shipment.contract_id %}" class="btn btn-sm btn-info text-white">
+        Details
+    </a>
+</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-
             </div>
             {% else %}
             <div class="alert alert-info" role="alert">
@@ -70,9 +94,8 @@
                 No ongoing shipments found.
             </div>
             {% endif %}
-            <!-- View Shipment Modal -->
+            
             <div class="modal fade" id="shipmentModal" tabindex="-1" aria-hidden="true">
-                
                 <div class="modal-dialog modal-dialog-centered modal-lg">
                     <div class="modal-content">
                     <div class="modal-header bg-primary text-white">
@@ -89,4 +112,82 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const REFRESH_INTERVAL_MS = 10000;
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.startsWith(name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Function to handle temperature updates (Keep this as is)
+    function fetchAndUpdateTemperature(contractId) {
+        const tempElement = document.querySelector(`.temp-display[data-contract-id="${contractId}"]`);
+        
+        if (!tempElement) return; 
+
+        const maxTemp = parseFloat(tempElement.getAttribute('data-max-temp'));
+        const minTemp = parseFloat(tempElement.getAttribute('data-min-temp'));
+
+        // NOTE: Correcting the endpoint from your URL structure
+        fetch(`/ongoing/data/?contract_id=${contractId}`) 
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const tempValue = data.temperature !== undefined && data.temperature !== null ? parseFloat(data.temperature) : null;
+
+                tempElement.textContent = tempValue !== null ? `${tempValue.toFixed(2)} °C` : 'N/A';
+                
+                if (tempValue !== null) {
+                    if (tempValue < minTemp || tempValue > maxTemp) {
+                        tempElement.classList.remove('text-success');
+                        tempElement.classList.add('text-danger');
+                    } else {
+                        tempElement.classList.remove('text-danger');
+                        tempElement.classList.add('text-success');
+                    }
+                } else {
+                    tempElement.classList.remove('text-success', 'text-danger');
+                    tempElement.classList.add('text-muted');
+                }
+            })
+            .catch(error => {
+                console.error(`Error updating temperature for contract ${contractId}:`, error);
+                tempElement.textContent = 'Error';
+                tempElement.classList.remove('text-success', 'text-danger', 'text-muted');
+                tempElement.classList.add('text-danger');
+            });
+    }
+
+    function startTemperatureUpdates() {
+        const rows = document.querySelectorAll('tr[data-contract-id]');
+        const contractIds = Array.from(rows).map(row => row.getAttribute('data-contract-id'));
+
+        contractIds.forEach(fetchAndUpdateTemperature);
+
+        setInterval(() => {
+            contractIds.forEach(fetchAndUpdateTemperature);
+        }, REFRESH_INTERVAL_MS);
+    }
+
+   
+</script>
 {% endblock %}
