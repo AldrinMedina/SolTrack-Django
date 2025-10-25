@@ -666,7 +666,7 @@ def ongoing_view(request):
 			"seller_address": contract.seller_address,
 			"current_temp": current_temp,
 			"gps_lat": gps_lat,
-			"gps_lon": gps_lon,
+			"gps_long": gps_lon,
 			"current_location": (
 				f"{gps_lat:.4f}, {gps_lon:.4f}"
 				if (gps_lat is not None and gps_lon is not None)
