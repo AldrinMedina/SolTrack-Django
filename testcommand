@@ -1,0 +1,3 @@
+python managecheck_contracts --contract 23 --loop --temp-window 300 --loc-window 180
+
+
