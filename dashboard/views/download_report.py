@@ -152,9 +152,9 @@ def download_contract_report(request, contract_id):
 	)
 	iot_data = [
 		['Average Temperature', f"{iot_summary['avg_temp']:.2f}°C" if iot_summary.get('avg_temp') else "N/A"],
-		['Minimum Temperature', f"{iot_summary['min_temp']:.2f}°C" if iot_summary.get('min_temp') else "N/A"],
-		['Maximum Temperature', f"{iot_summary['max_temp']:.2f}°C" if iot_summary.get('max_temp') else "N/A"],
-		['Final Temperature', final_temp],
+		['Lowest Temp Recorded', f"{iot_summary['min_temp']:.2f}°C" if iot_summary.get('min_temp') else "N/A"],
+		['Highest Temp Recorded', f"{iot_summary['max_temp']:.2f}°C" if iot_summary.get('max_temp') else "N/A"],
+		['Final Temp Recorded', final_temp],
 		['Temperature Status', temp_status],
 	]
 	iot_table = Table(iot_data, colWidths=[2.7*inch, 4*inch])
