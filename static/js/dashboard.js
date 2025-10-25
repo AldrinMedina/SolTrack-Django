@@ -1,5 +1,5 @@
 
-// Auto-refresh ongoing contracts table every minute
+    const REFRESH_INTERVAL_MS = 30000;
 if (window.location.pathname.includes('ongoing')) {
     setInterval(() => {
         fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -18,14 +18,68 @@ function toggleSidebar() {
     document.querySelector('.sidebar').classList.toggle('show');
 }
 
-// Update timestamp
-function updateTimestamp() {
-    const now = new Date();
-    document.getElementById('lastUpdated').textContent = now.toLocaleTimeString();
+function subscribeToTemperatureStream(contractId) {
+    const tempElement = document.getElementById(`live-temp-${contractId}`);
+    const row = document.querySelector(`tr[data-contract-id="${contractId}"]`);
+
+    if (!tempElement || !row) return;
+
+    const minTemp = parseFloat(row.getAttribute('data-min-temp'));
+    const maxTemp = parseFloat(row.getAttribute('data-max-temp'));
+    
+    // Connect to the new SSE endpoint
+    // 💡 Note: This assumes 'dashboard' is the app name and the URL is at the root.
+const url = `/dashboard/sse/contract/${contractId}/temperature/`;
+    const eventSource = new EventSource(url);
+    
+    console.log(`Subscribing to SSE stream for contract ${contractId}`);
+
+    eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            const tempValue = data.temperature;
+
+            // 1. Update text display
+            if (tempValue !== null && !isNaN(tempValue)) {
+                tempElement.textContent = `${tempValue.toFixed(2)} °C`;
+            
+                // 2. Update color based on thresholds
+                if (tempValue < minTemp || tempValue > maxTemp) {
+                    tempElement.className = 'fw-medium text-danger'; // Out of range
+                } else {
+                    tempElement.className = 'fw-medium text-success'; // Within range
+                }
+            } else {
+                tempElement.textContent = 'N/A';
+                tempElement.className = 'fw-medium text-muted';
+            }
+        } catch (error) {
+            console.error(`Error processing SSE data for contract ${contractId}:`, error);
+            tempElement.textContent = 'Data Error';
+            tempElement.className = 'fw-medium text-danger';
+        }
+    };
+
+    eventSource.onerror = function(error) {
+        console.error(`SSE connection error for contract ${contractId}.`, error);
+        // EventSource automatically attempts to reconnect
+        tempElement.textContent = 'Lost Stream';
+        tempElement.className = 'fw-medium text-warning';
+    };
 }
 
-setInterval(updateTimestamp, 30000); // Update every 30 seconds
+// 💡 Update the startup function to call the new subscription method
+function startTemperatureUpdates() {
+    const rows = document.querySelectorAll('tr[data-contract-id]');
+    const contractIds = Array.from(rows).map(row => row.getAttribute('data-contract-id'));
 
+    if (contractIds.length === 0) return;
+
+    // Start a persistent SSE stream for every contract
+    // This replaces the old `setInterval` loop
+    contractIds.forEach(subscribeToTemperatureStream);
+}
+document.addEventListener('DOMContentLoaded', startTemperatureUpdates);
 // Real-time temperature chart
 const chartElement = document.getElementById('chartData');
 const chartCanvas = document.getElementById('temperatureChart');
@@ -272,7 +326,7 @@ function updateOngoingShipments() {
 
                 const newRow = `
                     <tr>
-                        <td class="px-4 py-3">#${shipment.contract_id}</td>
+                        <td class="px-4 py-3">Debug</td>
                         <td class="px-4 py-3 fw-bold text-dark">${shipment.product_name}</td>
                         <td class="px-4 py-3">${temperatureDisplay}</td>
                         <td class="px-4 py-3">${statusBadge}</td>
@@ -282,6 +336,7 @@ function updateOngoingShipments() {
                             <button class="btn btn-sm btn-outline-primary view-shipment" data-id="${shipment.contract_id}">
                                 <i class="bi bi-eye"></i>
                             </button>
+                            
                         </td>
                     </tr>
                 `;
@@ -291,11 +346,7 @@ function updateOngoingShipments() {
         .catch(error => console.error('Error fetching ongoing shipment data:', error));
 }
 
-// Auto-run for ongoing page
-if (window.location.pathname.includes('ongoing')) {
-    updateOngoingShipments();
-    setInterval(updateOngoingShipments, 10000); // 10 seconds
-}
+
 
 document.addEventListener('click', function(e) {
     const button = e.target.closest('.view-shipment');
@@ -335,19 +386,6 @@ document.addEventListener('click', function(e) {
 });
 
 
-
-// Auto-refresh alerts section every minute
-setInterval(() => {
-    fetch('/dashboard/alerts/')
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const newContent = parser.parseFromString(html, 'text/html')
-                .querySelector('#alerts-content');
-            document.querySelector('#alerts-content').innerHTML = newContent.innerHTML;
-        })
-        .catch(err => console.error('Alert refresh failed:', err));
-}, 60000);
 
 
 // Auto-refresh only if dashboard-related pages are active
