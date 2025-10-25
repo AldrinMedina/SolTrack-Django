@@ -1,0 +1,37 @@
+python manage.py shell
+from dashboard.models import IoTData, Contract
+from django.utils import timezone
+import datetime
+#insert contract id
+c = Contract.objects.get(contract_id=1111) 
+device = c.IoT_Assigned  # must exist
+
+now = timezone.now()
+
+for i in range(12):  
+    IoTData.objects.create(
+        device=device,
+        device_id=device.device_id,
+        temperature=c.max_temp + 5,  
+        gps_lat=14.6123,
+        gps_long=120.9738,
+        recorded_at=now - datetime.timedelta(seconds=(12 - i) * 30)
+    )
+print("refund test")
+
+#succ
+for i in range(8):  
+    IoTData.objects.create(
+        device=device,
+        device_id=device.device_id,
+        temperature=5.5,  # normal temp
+        gps_lat=14.6123,  # should be near your contract.end_coord
+        gps_long=120.9738,
+        recorded_at=now - datetime.timedelta(seconds=(8 - i) * 30)
+    )
+print("succ")
+
+
+300 in seconds, 180 loc in seconds, radius for meters
+python manage.py check_contracts --temp-window 300 --loc-window 180 --loc-radius-m 10
+

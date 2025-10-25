@@ -3,6 +3,7 @@ from .contract_functions import (
 	deploy_contract_and_save,
 	create_contract_view,
 	process_contract_action
+	
 )
 from .download_report import (
 	download_contract_report
@@ -27,5 +28,7 @@ from .main_view import (
 	completed_view,
 	alerts_view,
 	download_license,
-	get_products_by_seller
+	get_products_by_seller,
+	activate_contract_view,
+	stream_contract_temperature
 )

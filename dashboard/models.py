@@ -74,7 +74,6 @@ class IoTDataHistory(models.Model):
     avg_temp = models.FloatField()
     min_temp = models.FloatField()
     max_temp = models.FloatField()
-    duration_hours = models.IntegerField()
     result = models.CharField(max_length=50, default='Normal')
     recorded_at = models.DateTimeField(auto_now_add=True)
 
