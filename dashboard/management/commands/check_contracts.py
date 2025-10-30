@@ -27,9 +27,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
      parser.add_argument("--contract", type=int, help="Check only this specific contract ID")
-     parser.add_argument("--temp-window", type=int, default=300, help="Temperature breach duration (seconds)")
+     parser.add_argument("--temp-window", type=int, default=180, help="Temperature breach duration (seconds)")
      parser.add_argument("--loc-window", type=int, default=180, help="Location arrival duration (seconds)")
-     parser.add_argument("--loc-radius-m", type=float, default=10.0, help="Radius (in meters) for completion")
+     parser.add_argument("--loc-radius-m", type=float, default=30.0, help="Radius (in meters) for completion")
      parser.add_argument("--loop", action="store_true", help="Continuously check every 30s (for live testing)")
      
     def handle(self, *args, **opts):

@@ -579,11 +579,7 @@ def execute_onchain_action(contract_db, action):
 
 
 def contract_temp_out_of_range_for(contract_db, window_seconds=300):
-	"""
-	Checks if the IoT device's temperature readings have been outside
-	the contract's min/max range for at least `window_seconds`.
-	Returns True if sustained violation, False otherwise.
-	"""
+
 	if not contract_db or not getattr(contract_db, 'IoT_Assigned', None):
 		print(f"no iot assigned{getattr(contract_db, 'contract_id', '?')}")
 		return False

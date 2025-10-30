@@ -5,6 +5,7 @@ import math
 from datetime import datetime
 import time
 import urllib.request
+import threading
 
 from Adafruit_IO import Client 
 from Adafruit_IO import RequestError, AdafruitIOError
@@ -21,6 +22,7 @@ from solcx import compile_source, install_solc, set_solc_version
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from django.core.cache import cache
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -35,7 +37,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.models import CustomUser
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
 from dashboard.forms import ProductForm
-from .contract_functions import activate_contract # Only needed if this file is main_view.py
+from .contract_functions import activate_contract 
 
 load_dotenv()
 
@@ -68,7 +70,6 @@ SUPABASE_HEADERS = {
 
 
 def push_iot_to_supabase(temperature=None, battery_voltage=None, gps_lat=None, gps_long=None, device_id=1):
-	"""Push IoT reading to Supabase REST API."""
 	payload = {
 		"device_id": device_id,
 		"temperature": temperature,
@@ -88,6 +89,18 @@ def push_iot_to_supabase(temperature=None, battery_voltage=None, gps_lat=None, g
 				print(f"Supabase error {resp.status}: {resp.read().decode()}")
 	except Exception as e:
 		print("Failed to push IoT data to Supabase:", e)
+		
+def async_push_iot_to_supabase(**kwargs):
+	def _runner():
+		print(f"async shunt, iot: {kwargs}")
+		try:
+			push_iot_to_supabase(**kwargs)
+		except Exception as e:
+			print("async failed ", e)
+	t = threading.Thread(target=_runner, daemon=True)
+	t.start()
+		
+		
 def get_products_by_seller(request, seller_id):
 	if request.method != 'GET':
 		return JsonResponse({'error': 'Invalid method.'}, status=405)
@@ -203,25 +216,23 @@ def stream_contract_temperature(request, contract_id):
 
 		while True:
 			try:
-				# --- Get assigned IoT device for this contract ---
 				contract = Contract.objects.filter(pk=contract_id).select_related('IoT_Assigned').first()
 				if not contract or not contract.IoT_Assigned:
 					yield f"data: {json.dumps({'temperature': None})}\n\n"
-					time.sleep(5)
+					time.sleep(1.5)
 					continue
 
 				device = contract.IoT_Assigned
 
-				# --- LIVE temperature from Adafruit ---
 				live_temp = fetch_adafruit_temp_for_live_display()
 
-				# --- Get latest IoT data for battery and GPS ---
 				latest_iot = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
 				battery = latest_iot.battery_voltage if latest_iot else None
-				gps_lat = latest_iot.gps_lat if latest_iot else None
-				gps_long = latest_iot.gps_long if latest_iot else None
+				#gps_lat = latest_iot.gps_lat if latest_iot else None
+				#gps_long = latest_iot.gps_long if latest_iot else None
+				gps_lat = aio.receive('gps-feed').lat
+				gps_long = aio.receive('gps-feed').lon
 
-				# --- Merge all data ---
 				temperature = live_temp if live_temp is not None else (
 					latest_iot.temperature if latest_iot else None
 				)
@@ -233,24 +244,22 @@ def stream_contract_temperature(request, contract_id):
 					"gps_long": gps_long,
 				}
 
-				# --- Only push if something changed ---
 				if any(current_data[k] != last_sent.get(k) for k in current_data) and temperature is not None:
 					try:
-						push_iot_to_supabase(
+						async_push_iot_to_supabase(
 							temperature=temperature,
 							battery_voltage=battery,
 							gps_lat=gps_lat,
 							gps_long=gps_long,
-							device_id=1,  # ✅ hardcode for now
+							device_id=1,
 						)
 						last_sent = current_data.copy()
 						print(f"Update for {contract_id} with live temp {temperature:.2f}°C")
 					except Exception as e:
 						print(f"Shunt failed for contract {contract_id}: {e}")
 
-				# --- Send to frontend via SSE ---
 				yield f"data: {json.dumps({'temperature': temperature})}\n\n"
-				time.sleep(5)
+				time.sleep(1.5)
 
 			except GeneratorExit:
 				break
@@ -603,10 +612,14 @@ def product_delete_view(request, pk):
 	return redirect("product_manager")
 
 def fetch_adafruit_temp_for_live_display():
-
+	cached = cache.get("adafruit_temp")
+	if cached: 
+		return cached
 	try:
-		latest_data = aio.receive(TEMP_FEED)
-		return float(latest_data.value)
+		latest = aio.receive(TEMP_FEED)
+		val = float(latest.value)
+		cache.set("adafruit_temp", val, timeout=5)
+		return val
 	
 	except RequestError as e:
 		# This catches errors like 'Feed not found' or 'No data' (404/204 status codes)
@@ -617,9 +630,8 @@ def fetch_adafruit_temp_for_live_display():
 		print(f"adafruit IO auth error (Check USERNAME/KEY): {e}")
 		return None
 	except Exception as e:
-		# Catches other issues like network connection or a ValueError on conversion
-		print(f"UNEXPECTED Error: {type(e).__name__}: {e}")
-		return None
+		print("Adafruit error:", e)
+		return cached
 		
 @login_required(login_url='login')
 def ongoing_view(request):
