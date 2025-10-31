@@ -55,6 +55,7 @@ SUPABASE_URL = os.getenv("SUPA_REST")
 SUPABASE_KEY = os.getenv("SUPA_SERVICE_KEY")
 
 TEMP_FEED = 'text-feed'
+GPS_FEED = 'gps-feed' 
 TEMP_THRESHOLD = 20.0       
 THRESHOLD_DURATION = 300    
 DELIVERY_THRESHOLD_KM = 0.010 
@@ -67,8 +68,99 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
+def fetch_adafruit_iot_data():
+    """
+    Fetch both temperature and GPS from Adafruit IO.
+    Works with the official Adafruit GPS object (with .lat and .lon attrs).
+    """
+    try:
+        # --- Temperature ---
+        temp_feed = aio.receive(TEMP_FEED)
+        temperature = float(temp_feed.value) if temp_feed and temp_feed.value is not None else None
 
+        # --- GPS ---
+        gps_lat = gps_long = None
+        try:
+            gps_feed = aio.receive('gps-feed')  # matches your original working code
+            if getattr(gps_feed, "lat", None) is not None and getattr(gps_feed, "lon", None) is not None:
+                gps_lat = float(gps_feed.lat)
+                gps_long = float(gps_feed.lon)
+                print(f"[IOT FETCH] GPS Coordinates: {gps_lat}, {gps_long}")
+            else:
+                print("[IOT FETCH] GPS feed exists but lat/lon are None.")
+        except Exception as e:
+            print(f"[IOT FETCH] GPS fetch error: {e}")
 
+        if temperature is not None:
+            print(f"[IOT FETCH] Temperature: {temperature:.2f}°C, GPS=({gps_lat}, {gps_long})")
+
+        return temperature, gps_lat, gps_long
+
+    except Exception as e:
+        print(f"[IOT FETCH] Error fetching from Adafruit: {e}")
+        return None, None, None
+def start_background_iot_sync():
+    def _loop():
+        print("IOT SHUNT ON")
+        last_sent = {"temp": None, "lat": None, "lon": None}
+        while True:
+            try:
+                has_active_contracts = Contract.objects.filter(status="Ongoing", IoT_Assigned__isnull=False).exists()
+                if not has_active_contracts:
+                    time.sleep(30)
+                    continue
+
+                temperature, gps_lat, gps_long = fetch_adafruit_iot_data()
+
+                if temperature is not None:
+                    should_push = (
+                        last_sent["temp"] != temperature or
+                        last_sent["lat"] != gps_lat or
+                        last_sent["lon"] != gps_long
+                    )
+
+                    if should_push:
+                        async_push_iot_to_supabase(
+                            temperature=temperature,
+                            gps_lat=gps_lat,
+                            gps_long=gps_long,
+                            device_id=1
+                        )
+                        last_sent = {"temp": temperature, "lat": gps_lat, "lon": gps_long}
+                        print(f"{temperature:.2f}°C @ ({gps_lat}, {gps_long}) pushed at {datetime.now()}")
+                    else:
+                        print("no change in iot skipped.")
+                else:
+                    print("no temp data")
+            except Exception as e:
+                print(f"sync error {e}")
+
+            # Wait before next loop
+            time.sleep(30)
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+def fetch_latest_iot(contract_id):
+	try:
+		contract = Contract.objects.select_related("IoT_Assigned").get(pk=contract_id)
+		device = contract.IoT_Assigned
+		if not device:
+			print(f"no iot connected to {contract_id}.")
+			return {"temperature": None, "recorded_at": None}
+
+		latest = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
+		if not latest:
+			print(f"no iot data for {device.device_id}.")
+			return {"temperature": None, "recorded_at": None}
+
+		return {
+			"temperature": latest.temperature,
+			"recorded_at": latest.recorded_at,
+		}
+
+	except Exception as e:
+		print(f"iot shunt for contract# error {contract_id}: {e}")
+		return {"temperature": None, "recorded_at": None}
 def push_iot_to_supabase(temperature=None, battery_voltage=None, gps_lat=None, gps_long=None, device_id=1):
 	payload = {
 		"device_id": device_id,
@@ -83,10 +175,10 @@ def push_iot_to_supabase(temperature=None, battery_voltage=None, gps_lat=None, g
 		data = json.dumps(payload).encode("utf-8")
 		req = urllib.request.Request(SUPABASE_IOTDATA_URL, data=data, headers=SUPABASE_HEADERS, method="POST")
 		with urllib.request.urlopen(req) as resp:
-			if resp.status in (200, 201, 204):
-				print(f"Iot shunt {payload}")
-			else:
-				print(f"Supabase error {resp.status}: {resp.read().decode()}")
+			body = resp.read().decode()
+			print(f"[SUPABASE] STATUS={resp.status}, BODY={body if body else '(no body)'}")
+	except urllib.error.HTTPError as e:
+		print(f"[SUPABASE] HTTPError {e.code}: {e.read().decode()}")
 	except Exception as e:
 		print("Failed to push IoT data to Supabase:", e)
 		
@@ -133,20 +225,16 @@ def haversine(lat1, lon1, lat2, lon2):
 	return R * c
 
 def _check_delivery_status(contract_db):
-	"""Checks GPS progress and updates contract status if delivered."""
 	if contract_db.status not in ['Ongoing', 'In Transit']:
 		return 0.0, contract_db.status
 	
-	# 1. Parse Coords (Check for missing data)
 	try:
 		s_lat, s_lon = map(float, contract_db.start_coord.split(','))
 		e_lat, e_lon = map(float, contract_db.end_coord.split(','))
 	except (AttributeError, ValueError):
 		return 0.0, "Coords Missing"
 		
-	# 2. Get Latest GPS Data
 	try:
-		# Assuming the contract is linked to one device (Device ID 1 is a common placeholder)
 		latest_data = IoTData.objects.filter(device_id=1).latest('recorded_at')
 		current_lat = latest_data.gps_lat
 		current_lon = latest_data.gps_long
@@ -157,7 +245,6 @@ def _check_delivery_status(contract_db):
 	except IoTData.DoesNotExist:
 		return 0.0, "No GPS Data"
 		
-	# 3. Calculate Progress
 	total_route_distance_km = haversine(s_lat, s_lon, e_lat, e_lon)
 	remaining_distance_km = haversine(current_lat, current_lon, e_lat, e_lon)
 	distance_covered_km = haversine(s_lat, s_lon, current_lat, current_lon)
@@ -168,12 +255,9 @@ def _check_delivery_status(contract_db):
 		progress_ratio = min(distance_covered_km / total_route_distance_km, 1.0)
 		progress_percent = progress_ratio * 100
 	
-	# 4. Check for Delivery Completion (100% and 3 minutes elapsed)
 	if remaining_distance_km < DELIVERY_THRESHOLD_KM:
-		# Check if 3 minutes have passed since the contract was activated
 		if (timezone.now() - contract_db.start_date).total_seconds() >= DELIVERY_COOLDOWN_SECONDS:
 			
-			# Update status to Delivered
 			if contract_db.status != 'Completed':
 				contract_db.status = 'Completed'
 				contract_db.end_date = timezone.now()
@@ -182,7 +266,6 @@ def _check_delivery_status(contract_db):
 			
 			return 100.0, "Completed"
 
-	# Return progress percentage and status string
 	return progress_percent, f"{progress_percent:.0f}%"
 def get_latest_temperature(contract):
 
@@ -207,68 +290,29 @@ def get_latest_temperature(contract):
 		
 def stream_contract_temperature(request, contract_id):
 	def event_stream():
-		last_sent = {
-			"temperature": None,
-			"battery_voltage": None,
-			"gps_lat": None,
-			"gps_long": None,
-		}
-
+		last_sent = None
 		while True:
 			try:
-				contract = Contract.objects.filter(pk=contract_id).select_related('IoT_Assigned').first()
-				if not contract or not contract.IoT_Assigned:
-					yield f"data: {json.dumps({'temperature': None})}\n\n"
-					time.sleep(1.5)
-					continue
+				data = fetch_latest_iot(contract_id)  
+				temperature = data.get("temperature")
+				recorded_at = data.get("recorded_at")
+				now = timezone.now()
 
-				device = contract.IoT_Assigned
+				if temperature:
+					cache.set(f"last_temp_{contract_id}", temperature, timeout=90)
+					cache.set(f"last_time_{contract_id}", recorded_at, timeout=90)
+					last_sent = now
 
-				live_temp = fetch_adafruit_temp_for_live_display()
+				else:
+					temperature = cache.get(f"last_temp_{contract_id}")
 
-				latest_iot = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
-				battery = latest_iot.battery_voltage if latest_iot else None
-				#gps_lat = latest_iot.gps_lat if latest_iot else None
-				#gps_long = latest_iot.gps_long if latest_iot else None
-				gps_lat = aio.receive('gps-feed').lat
-				gps_long = aio.receive('gps-feed').lon
+				yield f"data: {json.dumps({'temperature': temperature, 'time': str(recorded_at)})}\n\n"
 
-				temperature = live_temp if live_temp is not None else (
-					latest_iot.temperature if latest_iot else None
-				)
-
-				current_data = {
-					"temperature": temperature,
-					"battery_voltage": battery,
-					"gps_lat": gps_lat,
-					"gps_long": gps_long,
-				}
-
-				if any(current_data[k] != last_sent.get(k) for k in current_data) and temperature is not None:
-					try:
-						async_push_iot_to_supabase(
-							temperature=temperature,
-							battery_voltage=battery,
-							gps_lat=gps_lat,
-							gps_long=gps_long,
-							device_id=1,
-						)
-						last_sent = current_data.copy()
-						print(f"Update for {contract_id} with live temp {temperature:.2f}°C")
-					except Exception as e:
-						print(f"Shunt failed for contract {contract_id}: {e}")
-
-				yield f"data: {json.dumps({'temperature': temperature})}\n\n"
-				time.sleep(1.5)
-
-			except GeneratorExit:
-				break
+				time.sleep(10)
 			except Exception as e:
-				print(f"SSE error for contract {contract_id}: {e}")
-				yield f"data: {json.dumps({'temperature': None})}\n\n"
-				time.sleep(5)
-
-	response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+				print(f"temperature stream error ({contract_id}):", e)
+				time.sleep(10)
+	return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
 	response["Cache-Control"] = "no-cache"
 	return response
 
@@ -325,24 +369,20 @@ def dashboard_data(request):
 	ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
 	completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
 
-	# 🌡️ IoT Data (real-time readings)
 	devices = IoTDevice.objects.filter(contract__in=contracts)
 	iot_data = IoTData.objects.filter(device__in=devices)
 
 	avg_temp = iot_data.aggregate(avg=Avg("temperature"))["avg"] or 0
 	total_records = iot_data.count()
 
-	# Optional: define “Normal” temperature range (e.g., 2°C to 8°C)
 	normal_records = iot_data.filter(temperature__range=(2, 8)).count()
 	success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
 
-	# 🚨 Alerts
 	active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
 	system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
 	status_color = "bg-success" if active_alerts == 0 else "bg-danger"
 
 
-	# 📈 Chart data (latest 10 readings)
 	temp_history = (
 		iot_data.order_by("-recorded_at")[:10]
 		.values_list("recorded_at", "temperature")
@@ -370,24 +410,21 @@ def dashboard_data(request):
 def overview_view(request):
 	user = request.user  # The currently logged-in user
 
-	# 🧠 Determine the user role (Buyer/Seller/Admin)
 	user_role = request.session.get("user_role", "").lower()
 
 
-	# 🧩 Filter contracts based on user role
+	
 	if user_role.lower() == "buyer":
 		contracts = Contract.objects.filter(buyer=user)
 	elif user_role.lower() == "seller":
 		contracts = Contract.objects.filter(seller=user)
-	else:  # Admin sees all
+	else:
 		contracts = Contract.objects.all()
 
-	# 📊 Count stats
 	total_contracts = contracts.count()
 	active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
 	completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
 
-	# --- IOT DATA METRICS ---
 	iot_data = IoTDataHistory.objects.filter(contract__in=contracts)
 	avg_temp = iot_data.aggregate(avg=Avg("avg_temp"))["avg"] or 0
 
@@ -451,7 +488,7 @@ def active_view(request):
 		print(f"CRITICAL ERROR: Failed to query CustomUser roles. Check CustomUser model. Error: {e}")
 		sellers = CustomUser.objects.none() # Fallback to an empty queryset
 		
-	# --- END OF REPLACEMENT BLOCK ---
+
 
 	user_role = getattr(request.user, 'role', '').lower()
 	print(request.session.get("user_PK"))
@@ -524,41 +561,68 @@ def active_view(request):
 	
 	return render(request, 'dashboard/active.html', context)
 
-
 @csrf_exempt
 @require_POST
 @login_required(login_url='login')
 def activate_contract_view(request, contract_id):
-	iot_device_id = request.POST.get('iot_device_select') 
-	
-	# 2. Perform Database Linkage
-	if iot_device_id:
-		try:
-			# Fetch the Contract and the IoTDevice objects
-			contract_db = Contract.objects.get(pk=contract_id)
-			iot_device = IoTDevice.objects.get(pk=iot_device_id)
+	print(f"activation test shunt for {contract_id}")
 
-			# Link the contract to the device (assuming the field is IoT_Assigned)
-			contract_db.IoT_Assigned = iot_device 
-			contract_db.save()
-			
-			messages.info(request, f"Contract {contract_id} linked to device {iot_device.device_name}.")
+	iot_device_id = request.POST.get("iot_device_select")
+	if not iot_device_id:
+		print("No iot selected")
+		messages.error(request, "pls select iot")
+		return redirect("active")
 
-		except Contract.DoesNotExist:
-			messages.error(request, "Error: Contract not found for IoT linkage.")
-		except IoTDevice.DoesNotExist:
-			messages.error(request, "Error: Selected IoT device not found.")
-		except Exception as e:
-			# Handle any other database errors without stopping the Web3 call
-			messages.warning(request, f"Warning: Database linkage failed: {e}. Attempting contract activation...")
-	else:
-		# This occurs if the user didn't select a device (or there were no devices)
-		messages.warning(request, "No IoT device was selected or available. Proceeding with contract activation only.")
+	try:
+		contract_db = Contract.objects.get(pk=contract_id)
+	except Contract.DoesNotExist:
+		print(f"contract #{contract_id} not found")
+		messages.error(request, f"contract #{contract_id} not found")
+		return redirect("active")
 
-		
-	# 3. Call the core Web3 activation logic
-	# This function takes only (request, contract_id) as confirmed by you.
-	return activate_contract(request, contract_id)    
+	try:
+		iot_device = IoTDevice.objects.get(pk=iot_device_id)
+	except IoTDevice.DoesNotExist:
+		print(f"iot device #{iot_device_id} not found")
+		messages.error(request, "selected iot not found")
+		return redirect("active")
+
+	if iot_device.status != "Available":
+		print(f"iot '{iot_device.device_name}' not available (status={iot_device.status})")
+		messages.error(request, f"iot device #'{iot_device.device_name}' not available")
+		return redirect("active")
+
+	if not contract_db.buyer_id or not contract_db.seller_id:
+		print(f"contract {contract_id} missing buyer/seller")
+		messages.error(request, f"contract {contract_id} has missing buyer/seller")
+		return redirect("active")
+
+	try:
+		contract_db.IoT_Assigned = iot_device
+		contract_db.status = "Ongoing"
+		contract_db.start_date = timezone.now()
+		contract_db.save()
+		contract_db.refresh_from_db()
+		if not contract_db.IoT_Assigned:
+			print(f"iot shuntn ot in db")
+			messages.error(request, "no iot or somethin")
+			return redirect("active")
+
+		print(f"iot '{iot_device.device_name}' linked assigned to contract {contract_id}")
+
+	except Exception as e:
+		print(f"exception during for iot connect {e}")
+		messages.error(request, f"db connect failed {e}")
+		return redirect("active")
+
+	iot_device.status = "Active"
+	iot_device.contract = contract_db
+	iot_device.save()
+	print(f"iot device #'{iot_device.device_name}' marked active")
+
+	print(f"shuntin contract no#{contract_id}.")
+	messages.success(request, f"contract {contract_id} activated with '{iot_device.device_name}'.")
+	return activate_contract(request, contract_id)
 	
 
 @login_required(login_url='login')
@@ -638,18 +702,22 @@ def ongoing_view(request):
 	user = request.user
 	user_role = request.session.get("user_role", "").capitalize()
 
-	# Filter contracts by status + role
 	contracts = Contract.objects.filter(status__in=['Ongoing', 'Alert']).order_by('-start_date')
 	if user_role == "Buyer":
 		contracts = contracts.filter(buyer_address=user.m_address)
 	elif user_role == "Seller":
 		contracts = contracts.filter(seller_address=user.m_address)
-
-	live_temp = fetch_adafruit_temp_for_live_display()
-	if live_temp is not None:
-		print(f"latest Temperature: {live_temp:.2f} °C")
+	temperature, gps_lat, gps_long = fetch_adafruit_iot_data()
+	if temperature is not None:
+		print(f"Iot data{temperature:.2f}°C, GPS=({gps_lat}, {gps_long})")
+		async_push_iot_to_supabase(
+			temperature=temperature,
+			gps_lat=gps_lat,
+			gps_long=gps_long,
+			device_id=1
+		)
 	else:
-		print(f"Could not retrieve live temperature from Adafruit IO.")
+		print("no data from adafruit/iot")
 
 	ongoing_data = []
 	for contract in contracts:
@@ -861,3 +929,6 @@ def download_license(request, user_id):
 		return response
 	except CustomUser.DoesNotExist:
 		raise Http404("User not found")
+
+if os.environ.get("RUN_MAIN") == "true":
+    start_background_iot_sync()

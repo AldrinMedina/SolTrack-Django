@@ -2,7 +2,8 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
-import math 
+import math
+import traceback 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -92,11 +93,9 @@ def get_deployer_key_and_address():
 
 @login_required(login_url='login')
 def activate_contract(request, contract_id):
-	# Fetch deployer address for use as the escrow address
 	DEPLOYER_ADDRESS, _ = get_deployer_key_and_address() 
 
 	if request.method != 'POST':
-		# Redirect on non-POST request
 		return HttpResponseRedirect(reverse('active'))
 
 	try:
@@ -161,7 +160,7 @@ def activate_contract(request, contract_id):
 
 		contract_db.status = 'Ongoing' 
 		contract_db.start_date = timezone.now()
-		contract_db.start_coord = start_coords_str # Seller's coordinates upon activation
+		contract_db.start_coord = start_coords_str 
 		contract_db.save()
 		
 	except Contract.DoesNotExist:
@@ -171,7 +170,7 @@ def activate_contract(request, contract_id):
 		
 	return HttpResponseRedirect(reverse('active'))
 
-def deploy_contract_and_save(BuyerAddress, SellerAddress, BuyerID, SellerID, ProductName, PaymentAmount, Quantity, EndCoords, StartCoords, MaxTemp):
+def deploy_contract_and_save(request, BuyerAddress, SellerAddress, BuyerID, SellerID, ProductName, PaymentAmount, Quantity, EndCoords, StartCoords, MaxTemp):
 	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 
 	
 	print("--- Starting Contract Deployment Process (Pending Status) ---")
@@ -184,7 +183,12 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, BuyerID, SellerID, Pro
 	abi = contract_interface['abi']
 	bytecode = contract_interface['bin']
 	SimpleTransfer = web3.eth.contract(abi=abi, bytecode=bytecode)
-
+	buyer_id = request.POST.get("buyer_id") or request.POST.get("user_id") or request.session.get("user_id")
+	if not buyer_id:
+		print("Deploy shunt no buyer id in session/entry/post")
+		return JsonResponse({"missing buyer_id "}, status=400)
+	else:
+		print(f"Id check {buyer_id}")
 	# prep and dep
 	nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
 	print(f"1. Nonce for Deployment: {nonce}")
@@ -215,7 +219,7 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, BuyerID, SellerID, Pro
 	latest_contract = Contract.objects.aggregate(max_id=models.Max('contract_id'))['max_id']
 	next_contract_id = (latest_contract or 0) + 1
 	print(f"5. Saving contract details to database (Attempting ID: {next_contract_id}).")
-
+	buyer_id = int(buyer_id)
 	new_contract = Contract.objects.create(
 		contract_id=next_contract_id,	
 		buyer_address=BuyerAddress,
@@ -237,112 +241,176 @@ def deploy_contract_and_save(BuyerAddress, SellerAddress, BuyerID, SellerID, Pro
 	
 	return contract_address
 
-
 def create_contract_view(request):
-	if request.method == 'POST':
-		try:
-			buyer = request.user 
-			buyer_address = request.POST.get('buyer_address') 
-			user_id = request.POST.get('user_id')
-			print(f"DEBUG: Buyer Key in Session: {request.session.get('user_PK') is not None}")	
+    """
+    Validated wrapper for contract deployment + escrow payment.
+    Preserves your original deployment and escrow tx logic while ensuring
+    safe returns and better debugging.
+    """
+    print("\n[CREATE CONTRACT VIEW] 🚀 Starting Contract Deployment Process (Pending Status)...")
 
-			selected_seller_id = request.POST.get('selected_seller') 
-			
-			product_id = request.POST.get('selected_product') 
-			quantity = int(request.POST.get('quantity'))
+    if request.method != "POST":
+        messages.error(request, "Invalid request method.")
+        print("[CREATE CONTRACT VIEW] ❌ Invalid request method (must be POST).")
+        return redirect("active")
 
-			if quantity <= 0:
-				messages.error(request, "Quantity must be a positive number.")
-				return HttpResponseRedirect(reverse('active'))
+    try:
+        # --- Collect and validate inputs from POST ---
+        buyer = request.user
+        buyer_address = request.POST.get('buyer_address') or getattr(buyer, "m_address", None)
+        user_id = request.POST.get('user_id') or getattr(buyer, "user_id", None)
 
-			product = Product.objects.get(product_id=product_id)
-			product_name = product.product_name
-			payment_amount = product.price_eth * quantity
-			max_temp = product.max_temp
-			
-			seller_user = CustomUser.objects.get(pk=selected_seller_id, role__iexact='seller')
-			seller_address = seller_user.m_address 
-			seller_id = seller_user.user_id
-			seller_lat = seller_user.latitude 
-			seller_lon = seller_user.longitude
-			start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
+        selected_seller_id = request.POST.get('selected_seller')
+        product_id = request.POST.get('selected_product')
+        quantity_raw = request.POST.get('quantity')
 
-			buyer_lat = buyer.latitude 
-			buyer_lon = buyer.longitude
-			end_coords_str = f"{buyer_lat},{buyer_lon}" if buyer_lat and buyer_lon else None
-			
-			contract_address = deploy_contract_and_save(
-				BuyerAddress=buyer_address, 
-				BuyerID=user_id,
-				SellerAddress=seller_address, 
-				SellerID=seller_id,
-				ProductName=product_name, 
-				PaymentAmount=payment_amount,
-				Quantity=quantity,
-				EndCoords=end_coords_str,
-				StartCoords=start_coords_str, 
-				MaxTemp=max_temp
-			)
-			
-			buyer_private_key = request.session.get("user_PK")
-			buyer_address_from_user = request.user.m_address 
+        # Basic validation
+        missing = []
+        if not buyer_address:
+            missing.append("buyer_address (session/user missing)")
+        if not user_id:
+            missing.append("user_id (session/user missing)")
+        if not selected_seller_id:
+            missing.append("selected_seller")
+        if not product_id:
+            missing.append("selected_product")
+        if not quantity_raw:
+            missing.append("quantity")
 
-			if not buyer_private_key:
-				messages.error(request, "Contract deployed. ERROR: Buyer private key not found in session. Escrow fee was NOT paid.")
-				return HttpResponseRedirect(reverse('active'))
+        if missing:
+            msg = f"Missing required fields: {', '.join(missing)}"
+            print(f"[CREATE CONTRACT VIEW] ⚠️ {msg}")
+            messages.error(request, msg)
+            return redirect("active")
 
-			DEPLOYER_ADDRESS, _ = get_deployer_key_and_address()
-			
-			if buyer_address_from_user == DEPLOYER_ADDRESS:
-				messages.error(request, "CRITICAL ERROR: Buyer and Deployer addresses are identical. Cannot perform escrow transfer. Please log in as a different user.")
-				return HttpResponseRedirect(reverse('active'))
-			
-			amount_eth = FIXED_ESCROW_FEE_ETH
-			amount_wei = web3.to_wei(amount_eth, 'ether')
-			
-			if not web3.is_connected():
-				raise ConnectionError("Web3 not connected for escrow payment.")
+        try:
+            quantity = int(quantity_raw)
+            if quantity <= 0:
+                raise ValueError("Quantity must be > 0")
+        except Exception as e:
+            print(f"[CREATE CONTRACT VIEW] ❌ Invalid quantity: {quantity_raw} ({e})")
+            messages.error(request, "Invalid quantity.")
+            return redirect("active")
 
-			nonce = web3.eth.get_transaction_count(buyer_address_from_user)
-			estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
-			
-			print(f"\n[{timezone.now()}] STARTING ESCROW PAYMENT (Contract Creation):")
-			print(f"  AMOUNT: {amount_eth} ETH (FIXED_ESCROW_FEE_ETH)")
-			print(f"  FROM (Buyer): {buyer_address_from_user}")
-			print(f"  TO (Deployer/Escrow): {DEPLOYER_ADDRESS}")
-			print(f"  CONTRACT SELLER ADDRESS: {seller_address}") # <-- NEW DEBUG LINE
-			
-			tx_data = {
-				'chainId': web3.eth.chain_id,
-				'from': buyer_address_from_user,
-				'to': DEPLOYER_ADDRESS, 
-				'nonce': nonce,
-				'value': amount_wei,
-				'maxFeePerGas': int(estimated_fees * 2),
-				'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-				'gas': 21000 
-			}
-			
-			signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=buyer_private_key)
-			tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
-			receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        # Fetch product & seller
+        try:
+            product = Product.objects.get(product_id=product_id)
+        except Product.DoesNotExist:
+            print(f"[CREATE CONTRACT VIEW] ❌ Product id {product_id} not found.")
+            messages.error(request, "Selected product not found.")
+            return redirect("active")
 
-			if receipt.status == 1:
-				messages.success(request, f"Contract deployed successfully at: {contract_address}. Escrow fee of {FIXED_ESCROW_FEE_ETH} ETH paid successfully (TX: {tx_hash.hex()}). Awaiting Seller activation.")
-			else:
-				raise Exception(f"Escrow fee payment failed on-chain. Contract deployed but unfunded.")
-			
-		except Product.DoesNotExist:
-			messages.error(request, "Selected product not found.")
-		except CustomUser.DoesNotExist:
-			messages.error(request, "Selected seller not found or invalid.")
-		except Exception as e:
-			print(f"Contract Creation Error: {e}")
-			messages.error(request, f"Contract creation failed: {e}")
-			
-		return HttpResponseRedirect(reverse('active')) 
-	
-	return HttpResponseRedirect(reverse('active'))
+        try:
+            seller_user = CustomUser.objects.get(pk=selected_seller_id, role__iexact="seller")
+        except CustomUser.DoesNotExist:
+            print(f"[CREATE CONTRACT VIEW] ❌ Seller id {selected_seller_id} not found or not a seller.")
+            messages.error(request, "Selected seller not found.")
+            return redirect("active")
+
+        product_name = product.product_name
+        payment_amount = product.price_eth * quantity
+        max_temp = product.max_temp
+
+        seller_address = seller_user.m_address
+        seller_id = seller_user.user_id
+        seller_lat = seller_user.latitude
+        seller_lon = seller_user.longitude
+        start_coords_str = f"{seller_lat},{seller_lon}" if seller_lat and seller_lon else None
+
+        buyer_lat = getattr(buyer, "latitude", None)
+        buyer_lon = getattr(buyer, "longitude", None)
+        end_coords_str = f"{buyer_lat},{buyer_lon}" if buyer_lat and buyer_lon else None
+
+        # --- CALL YOUR DEPLOY + SAVE FUNCTION (unchanged signature) ---
+        print(f"[CREATE CONTRACT VIEW] Deploying contract for product '{product_name}' - SellerID {seller_id} -> BuyerID {user_id}")
+        contract_address = deploy_contract_and_save(
+            request,
+            BuyerAddress=buyer_address,
+            SellerAddress=seller_address,
+            BuyerID=user_id,
+            SellerID=seller_id,
+            ProductName=product_name,
+            PaymentAmount=payment_amount,
+            Quantity=quantity,
+            EndCoords=end_coords_str,
+            StartCoords=start_coords_str,
+            MaxTemp=max_temp
+        )
+
+        if not contract_address:
+            print("[CREATE CONTRACT VIEW] ❌ deploy_contract_and_save returned no contract address.")
+            messages.error(request, "Contract deployment failed.")
+            return redirect("active")
+
+        # --- ESCROW PAYMENT (preserve your original TX flow) ---
+        buyer_private_key = request.session.get("user_PK")
+        buyer_address_from_user = request.user.m_address
+
+        if not buyer_private_key:
+            # Contract deployed but buyer couldn't pay escrow
+            print("[CREATE CONTRACT VIEW] ⚠️ Buyer private key missing in session. Escrow not paid.")
+            messages.error(request, "Contract deployed. ERROR: Buyer private key not found in session. Escrow fee was NOT paid.")
+            return redirect("active")
+
+        DEPLOYER_ADDRESS, _ = get_deployer_key_and_address()
+
+        if buyer_address_from_user == DEPLOYER_ADDRESS:
+            print("[CREATE CONTRACT VIEW] ❌ Buyer and Deployer addresses are identical. Abort escrow.")
+            messages.error(request, "CRITICAL ERROR: Buyer and Deployer addresses are identical. Cannot perform escrow transfer. Please log in as a different user.")
+            return redirect("active")
+
+        amount_eth = FIXED_ESCROW_FEE_ETH
+        amount_wei = web3.to_wei(amount_eth, 'ether')
+
+        if not web3.is_connected():
+            raise ConnectionError("Web3 not connected for escrow payment.")
+
+        # NOTE: keep nonce/fee/tx logic as you had it
+        nonce = web3.eth.get_transaction_count(buyer_address_from_user)
+        estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
+
+        print(f"\n[{timezone.now()}] STARTING ESCROW PAYMENT (Contract Creation):")
+        print(f"  AMOUNT: {amount_eth} ETH (FIXED_ESCROW_FEE_ETH)")
+        print(f"  FROM (Buyer): {buyer_address_from_user}")
+        print(f"  TO (Deployer/Escrow): {DEPLOYER_ADDRESS}")
+        print(f"  CONTRACT SELLER ADDRESS: {seller_address}")
+
+        tx_data = {
+            'chainId': web3.eth.chain_id,
+            'from': buyer_address_from_user,
+            'to': DEPLOYER_ADDRESS,
+            'nonce': nonce,
+            'value': amount_wei,
+            'maxFeePerGas': int(estimated_fees * 2),
+            'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
+            'gas': 21000
+        }
+
+        signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=buyer_private_key)
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt.status == 1:
+            messages.success(request, f"Contract deployed successfully at: {contract_address}. Escrow fee of {FIXED_ESCROW_FEE_ETH} ETH paid successfully (TX: {tx_hash.hex()}). Awaiting Seller activation.")
+            print(f"[CREATE CONTRACT VIEW] ✅ Escrow payment succeeded (tx {tx_hash.hex()}).")
+        else:
+            # TX failed — contract deployed but not funded
+            raise Exception(f"Escrow fee payment failed on-chain. Contract deployed but unfunded. Receipt status: {receipt.status}")
+
+        # Final success redirect
+        return redirect("active")
+
+    except Product.DoesNotExist:
+        messages.error(request, "Selected product not found.")
+        return redirect("active")
+    except CustomUser.DoesNotExist:
+        messages.error(request, "Selected seller not found or invalid.")
+        return redirect("active")
+    except Exception as e:
+        print(f"[CREATE CONTRACT VIEW] ❌ Contract Creation Error: {e}")
+        traceback.print_exc()
+        messages.error(request, f"Contract creation failed: {e}")
+        return redirect("active")
 
 def process_contract_action(request, contract_id):
 	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 
@@ -648,12 +716,10 @@ def contract_within_end_coords_for(contract_db, radius_km=0.01, window_seconds=1
 		print(f"no IoT device assigned for contract {getattr(contract_db, 'contract_id', '?')}")
 		return False
 
-	# ✅ FIXED: use end_coord (singular)
 	if not getattr(contract_db, 'end_coord', None):
 		print(f"{contract_db.contract_id} has no end_coord.")
 		return False
 
-	# ✅ Parse "lat,long" string
 	try:
 		end_lat_str, end_lon_str = str(contract_db.end_coord).split(',')
 		end_lat = float(end_lat_str.strip())
