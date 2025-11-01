@@ -1,5 +1,6 @@
 from django import forms
 from .models import CustomUser
+from django.core.validators import FileExtensionValidator
 
 ROLE_CHOICES = [
     ("buyer", "Buyer"),
@@ -8,31 +9,41 @@ ROLE_CHOICES = [
 ]
 
 
-class RegistrationForm(forms.ModelForm):
-    password = forms.CharField(widget=forms.PasswordInput)
-    confirm_password = forms.CharField(widget=forms.PasswordInput)
-    business_license = forms.FileField(required=False)
-
-    class Meta:
-        model = CustomUser
-        fields = ['full_name', 'email', 'm_address', 'role', 'password', 'organization', 'address']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Limit roles to Buyer/Seller only
-        self.fields['role'].choices = [
-            ('Buyer', 'Buyer'),
-            ('Seller', 'Seller')
-        ]
+class BaseUserInfoForm(forms.Form):
+    full_name = forms.CharField(max_length=255, label="Full name")
+    email = forms.EmailField(label="Email address")
+    password = forms.CharField(widget=forms.PasswordInput, label="Password")
+    confirm_password = forms.CharField(widget=forms.PasswordInput, label="Confirm password")
 
     def clean(self):
-        cleaned_data = super().clean()
-        pw = cleaned_data.get('password')
-        cpw = cleaned_data.get('confirm_password')
-
+        cleaned = super().clean()
+        pw = cleaned.get("password")
+        cpw = cleaned.get("confirm_password")
         if pw and cpw and pw != cpw:
             raise forms.ValidationError("Passwords do not match.")
-        return cleaned_data
+        return cleaned
+
+class BuyerUserForm(BaseUserInfoForm):
+    pass
+
+class SellerUserForm(BaseUserInfoForm):
+    pass
+
+# --- Organization forms ---
+class BuyerOrgForm(forms.Form):
+    organization = forms.CharField(max_length=255, required=False)
+    address = forms.CharField(max_length=500, required=False)
+    m_address = forms.CharField(max_length=255, required=False, label="MetaMask Wallet Address")
+
+class SellerOrgForm(forms.Form):
+    organization = forms.CharField(max_length=255, required=False)
+    address = forms.CharField(max_length=500, required=False)
+    m_address = forms.CharField(max_length=255, required=False, label="MetaMask Wallet Address")
+    business_license = forms.FileField(
+        required=False,
+        validators=[FileExtensionValidator(['pdf', 'jpg', 'jpeg', 'png'])],
+        help_text="PDF, JPG, PNG (MAX. 5MB)"
+    )
 
     
 class LoginForm(forms.Form):

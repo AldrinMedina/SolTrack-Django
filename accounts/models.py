@@ -60,3 +60,18 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+    
+class PendingUser(models.Model):
+    id = models.AutoField(primary_key=True)  # matches your serial PK
+    name = models.CharField(max_length=255)
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=255)  # we'll store a hashed password
+    role = models.CharField(max_length=50)
+    token = models.CharField(max_length=255)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    class Meta:
+        db_table = 'pending_user'
+        managed = False  # table already exists
+
