@@ -5,4 +5,22 @@
     const ONGOING_DATA_URL = "{% url 'ongoing_data_json' %}";
     const SHIPMENT_DETAILS_URL = "{% url 'shipment_details' contract_id=0 %}";
 </script>
+<style>
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.text-loading {
+  color: #888;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+.live-temp-updated {
+  transition: color 0.4s ease, opacity 0.4s ease;
+}
+</style>
+
+{% block extra_js %}{% endblock %}
+
 {% include 'includes/footer.html' %}

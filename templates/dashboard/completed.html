@@ -39,7 +39,11 @@
                             <td class="px-3 py-3">
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge bg-{{ status_class }} px-3 py-2 rounded-pill">{{ item.status }}</span>
-                                    <i class="bi bi-check-circle-fill text-{{ status_class }}"></i>
+                                    {% if item.refunded %}
+										<i class="bi bi-x-circle-fill text-danger"></i>
+									{% else %}
+										<i class="bi bi-check-circle-fill text-primary"></i>
+									{% endif %}
                                 </div>
                             </td>
                             <td class="px-3 py-3">
