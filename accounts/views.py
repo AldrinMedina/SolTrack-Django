@@ -38,7 +38,7 @@ def login_view(request):
             request.session["user_latitude"] = user.latitude
             request.session["user_longitude"] = user.longitude
             request.session["login_time"] = timezone.now().isoformat()
-
+            request.session["user_PK"] = user.private_key
             login(request, user)  # Django built-in login
 
             messages.success(request, f"✅ Welcome back, {user.full_name}!")
