@@ -756,7 +756,6 @@ def contract_within_end_coords_for(contract_db, radius_km=0.01, window_seconds=1
 			dist_km = haversine(lat, lon, end_lat, end_lon)
 			inside = (dist_km <= radius_km)
 
-			# ✅ Optional: print distances for debugging
 			print(f"{contract_db.contract_id} — distance {dist_km*1000:.2f} m from destination at {ts}")
 
 		if inside:
@@ -769,11 +768,9 @@ def contract_within_end_coords_for(contract_db, radius_km=0.01, window_seconds=1
 				current_seg_start = None
 				last_ts = None
 
-	# Close last segment if still inside
 	if current_seg_start is not None and last_ts is not None:
 		segments.append((current_seg_start, last_ts))
 
-	# ✅ Check if any segment stayed within the radius long enough
 	for (s, e) in segments:
 		duration = (e - s).total_seconds()
 		if duration >= window_seconds:
@@ -804,10 +801,17 @@ def run_auto_checks_for_all_contracts(check_temp_seconds=300, check_location_sec
 					ok = execute_onchain_action(c, 'refund')
 					if ok:
 						summary['refunds'].append(c.contract_id)
+						try:
+							iot_device = c.IoT_Assigned
+							iot_device.status = "Available"
+							iot_device.contract_id = None
+							iot_device.save()
+							print(f"[IOT RESET] IoT '{iot_device.device_name}' released from refunded Contract {c.contract_id}.")
+						except Exception as e:
+							print(f"[IOT RESET] Failed to reset IoT for refunded Contract {c.contract_id}: {e}")
+
 					else:
 						summary['skipped'].append((c.contract_id, "refund_failed"))
-
-					# after refund, skip completion check
 					continue
 			#check loc for success
 			if contract_within_end_coords_for(c, radius_km=location_radius_km, window_seconds=check_location_seconds):
@@ -816,6 +820,14 @@ def run_auto_checks_for_all_contracts(check_temp_seconds=300, check_location_sec
 					ok = execute_onchain_action(c, 'complete')
 					if ok:
 						summary['completions'].append(c.contract_id)
+						try:
+							iot_device = c.IoT_Assigned
+							iot_device.status = "Available"
+							iot_device.contract_id = None
+							iot_device.save()
+							print(f"[IOT RESET] IoT '{iot_device.device_name}' released from completed Contract {c.contract_id}.")
+						except Exception as e:
+							print(f"[IOT RESET] Failed to reset IoT for completed Contract {c.contract_id}: {e}")
 					else:
 						summary['skipped'].append((c.contract_id, "complete_failed"))
 					continue
