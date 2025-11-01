@@ -30,4 +30,5 @@ urlpatterns = [
     path('get-products/<int:seller_id>/', views.get_products_by_seller, name='get_products_by_seller'),  
     path('contract/activate/<int:contract_id>/', views.activate_contract_view, name='activate_contract_view'),
     path('sse/contract/<int:contract_id>/temperature/', views.stream_contract_temperature, name='contract_temp_sse'),
+    path("ongoing/<int:contract_id>/logs/", views.shipment_log_view, name="shipment_logs"),
 ]

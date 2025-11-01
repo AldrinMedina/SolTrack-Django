@@ -2,7 +2,7 @@ import os
 import json 
 import random 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import urllib.request
 import threading
@@ -68,13 +68,129 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
-def fetch_adafruit_iot_data():
-    """
-    Fetch both temperature and GPS from Adafruit IO.
-    Works with the official Adafruit GPS object (with .lat and .lon attrs).
-    """
+
+def get_summarized_log_data(device_id):
+    readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
+    log_summary = []
+
+    if not readings.exists():
+        return [{
+            "log_time": "N/A",
+            "log_message": "No IoT readings available for this shipment"
+        }]
+
+    # Find first valid reading
+    first_reading = next(
+        (r for r in readings if r.temperature is not None and r.recorded_at is not None),
+        None
+    )
+    if not first_reading:
+        return [{
+            "log_time": "N/A",
+            "log_message": "No temps yet"
+        }]
+
+    current_temp = first_reading.temperature
+    start_time = first_reading.recorded_at
+
+    for i in range(1, len(readings)):
+        reading = readings[i]
+        temp = reading.temperature
+        end_time = getattr(readings[i - 1], "recorded_at", None)
+
+        if temp is None or reading.recorded_at is None:
+            continue
+        if not start_time or not end_time:
+            print(f"[DEBUG] Skipped None timestamps at index {i} start={start_time}, end={end_time}")
+            continue
+        if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
+            print(f"[DEBUG] Skipped non-datetime types at index {i}: start={type(start_time)}, end={type(end_time)}")
+            continue
+
+        if abs(temp - current_temp) >= 0.1:
+            try:
+                duration = end_time - start_time
+                if not isinstance(duration, timedelta):
+                    print(f"time-delta shunt not at {i}: {duration}")
+                    continue
+
+                minutes = int(duration.total_seconds() // 60)
+                seconds = int(duration.total_seconds() % 60)
+                duration_str = f"{minutes}m {seconds}s" if (minutes or seconds) else "less than sec"
+
+                log_summary.append({
+                    "log_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "log_message": (
+                        f"Temp held **{current_temp:.2f} °C** for {duration_str}. "
+                        f"Changed to **{temp:.2f} °C**."
+                    ),
+                })
+
+                current_temp = temp
+                start_time = reading.recorded_at
+
+            except Exception as e:
+                print(f"[DEBUG] Duration calc failed at index {i}: {e}")
+                continue
+
+    last_reading = readings.last()
+    end_time = getattr(last_reading, "recorded_at", None)
+    if not start_time or not end_time:
+        print(f"skipped time start={start_time}, end={end_time}")
+        return log_summary
+
     try:
-        # --- Temperature ---
+        final_duration = end_time - start_time
+        if isinstance(final_duration, timedelta):
+            minutes = int(final_duration.total_seconds() // 60)
+            seconds = int(final_duration.total_seconds() % 60)
+            duration_str = f"{minutes}m {seconds}s" if (minutes or seconds) else "less than sec"
+        else:
+            duration_str = "unknown duration"
+
+        log_summary.append({
+            "log_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "log_message": (
+                f"Temp currently **{current_temp:.2f} °C** since "
+                f"{start_time.strftime('%H:%M:%S')} (Duration: {duration_str})."
+            ),
+        })
+    except Exception as e:
+        print(f"[DEBUG] Final duration calc failed: {e}")
+
+    return log_summary
+    
+    
+@login_required(login_url='login')
+def shipment_log_view(request, contract_id):
+    print(f"[LOG VIEW] Fetching logs for contract {contract_id}")
+    try:
+        contract = Contract.objects.get(pk=contract_id)
+        if not contract.IoT_Assigned:
+            return JsonResponse({"error": "No IoT device assigned to this contract."}, status=404)
+
+        # Use correct field name
+        device_id = contract.IoT_Assigned.device_id
+        print(f"[LOG VIEW] Found IoT device ID: {device_id}")
+
+        summarized_logs = get_summarized_log_data(device_id)
+        print(f"[LOG VIEW] Found {len(summarized_logs)} summarized entries for device {device_id}.")
+
+        return JsonResponse({
+            "contract_id": contract_id,
+            "device_id": device_id,
+            "log": summarized_logs
+        })
+
+    except Contract.DoesNotExist:
+        return JsonResponse({"error": f"Contract {contract_id} not found."}, status=404)
+    except Exception as e:
+        print(f"[LOG VIEW] Error fetching logs for contract {contract_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+        
+def fetch_adafruit_iot_data():
+
+    try:
         temp_feed = aio.receive(TEMP_FEED)
         temperature = float(temp_feed.value) if temp_feed and temp_feed.value is not None else None
 

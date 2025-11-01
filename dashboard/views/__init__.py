@@ -30,5 +30,6 @@ from .main_view import (
 	download_license,
 	get_products_by_seller,
 	activate_contract_view,
-	stream_contract_temperature
+	stream_contract_temperature,
+	shipment_log_view,
 )
