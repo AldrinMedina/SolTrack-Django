@@ -133,8 +133,9 @@ def register_user_info(request, role):
             email.send(fail_silently=False)
 
             # redirect to 'check your inbox' page (you can have a template or message)
-            messages.success(request, "✅ Verification email sent. Please check your inbox (link valid for 1 hour).")
-            return redirect('choose_role')
+            # messages.success(request, "✅ Verification email sent. Please check your inbox (link valid for 1 hour).")
+            request.session['sent_email'] = form.cleaned_data['email']
+            return redirect('email_sent')
         else:
             messages.error(request, "Please correct the errors below.")
     else:
@@ -218,8 +219,8 @@ def register_organization(request, token):
 
             uploaded_file = request.FILES.get('business_license')
             if uploaded_file:
-                # If CustomUser.business_license is a FileField, this will save correctly.
-                user.business_license = uploaded_file
+                # If CustomUser.business_license is a BinaryField, read the bytes first.
+                user.business_license = uploaded_file.read()
 
             # try geocoding address (same as you used earlier)
             address = user.address
@@ -252,6 +253,11 @@ def register_organization(request, token):
         'role': role.capitalize(),
         'token': token
     })
+
+def email_sent_view(request):
+    email = request.session.pop('sent_email', None)
+    return render(request, 'registration_email_sent.html', {'email': email})
+
 
 # Logout view
 def logout_view(request):

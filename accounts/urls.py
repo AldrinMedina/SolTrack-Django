@@ -12,6 +12,7 @@ urlpatterns = [
     path('register/user-info/<str:role>/', views.register_user_info, name='register_user_info'),
     path('verify/<str:token>/', views.verify_email, name='verify_email'),
     path('register/organization/<str:token>/', views.register_organization, name='register_organization'),
-    
+    path('register/email-sent/', views.email_sent_view, name='email_sent'),
+
     path('logout/', views.logout_view, name='logout'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
