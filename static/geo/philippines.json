@@ -1,0 +1,143 @@
+[
+  {
+    "code": "NCR",
+    "name": "National Capital Region",
+    "provinces": [
+      {
+        "code": "NCR",
+        "name": "Metro Manila",
+        "cities": [
+          { "code": "MNL", "name": "Manila", "barangays": [] },
+          { "code": "MKT", "name": "Makati", "barangays": [] },
+          { "code": "QZN", "name": "Quezon City", "barangays": [] },
+          { "code": "PSG", "name": "Pasig", "barangays": [] },
+          { "code": "MND", "name": "Mandaluyong", "barangays": [] }
+        ]
+      }
+    ]
+  },
+
+  {
+    "code": "REG3",
+    "name": "Region III - Central Luzon",
+    "provinces": [
+      {
+        "code": "PAMP",
+        "name": "Pampanga",
+        "cities": [
+          {
+            "code": "SFP",
+            "name": "San Fernando",
+            "barangays": ["Alasas", "San Agustin", "Sindalan", "Telabastagan"]
+          },
+          {
+            "code": "ANG",
+            "name": "Angeles City",
+            "barangays": ["Balibago", "Pulung Maragul", "Cutcut"]
+          }
+        ]
+      },
+      {
+        "code": "BATA",
+        "name": "Bataan",
+        "cities": [
+          {
+            "code": "BAL",
+            "name": "Balanga",
+            "barangays": ["Bagong Silang", "Cupang Proper", "Poblacion"]
+          }
+        ]
+      }
+    ]
+  },
+
+  {
+    "code": "REG4A",
+    "name": "Region IV-A - CALABARZON",
+    "provinces": [
+      {
+        "code": "BTG",
+        "name": "Batangas",
+        "cities": [
+          {
+            "code": "LIPA",
+            "name": "Lipa City",
+            "barangays": [
+              "Adya",
+              "Anilao",
+              "Anilao-Labac",
+              "Antipolo del Norte",
+              "Antipolo del Sur",
+              "Bagong Pook",
+              "Balintawak",
+              "Banay-banay",
+              "Bolbok",
+              "Bulacnin",
+              "Bugtong na Pulo",
+              "Calamias",
+              "Cumba",
+              "Dagatan",
+              "Duhatan",
+              "Halang",
+              "Inosluban",
+              "Kayumanggi",
+              "Latag",
+              "Lodlod",
+              "Lumbang",
+              "Mabini",
+              "Malagonlong",
+              "Malitlit",
+              "Marawoy",
+              "Mataas na Lupa",
+              "Munting Pulo",
+              "Pagolingin Bata",
+              "Pagolingin East",
+              "Pagolingin West",
+              "Pangao",
+              "Pinagkawitan",
+              "Pinagtongulan",
+              "Plaridel",
+              "Poblacion Barangay 1",
+              "Poblacion Barangay 2",
+              "Poblacion Barangay 3",
+              "Poblacion Barangay 4",
+              "Pusil",
+              "Quezon",
+              "Rizal",
+              "Sabang",
+              "Sampaguita",
+              "San Benildo",
+              "San Carlos",
+              "San Celestino",
+              "San Francisco",
+              "San Guillermo",
+              "San Jose",
+              "San Juan",
+              "San Lucas",
+              "San Salvador",
+              "San Sebastian",
+              "Santo Niño",
+              "Sapac",
+              "Sico",
+              "Sico 2",
+              "Talisay",
+              "Tambo",
+              "Tanguay"
+            ]
+          }
+        ]
+      },
+      {
+        "code": "CAV",
+        "name": "Cavite",
+        "cities": [
+          {
+            "code": "DSP",
+            "name": "Dasmariñas",
+            "barangays": ["Burol", "Paliparan", "Salitran"]
+          }
+        ]
+      }
+    ]
+  }
+]

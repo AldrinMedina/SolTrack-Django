@@ -55,6 +55,9 @@
           <div class="col-md-6">
             <label class="form-label">Password</label>
             {{ form.password }}
+            <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password', this)">
+                Show
+            </button>
             {% for err in form.password.errors %}
               <div class="text-danger">{{ err }}</div>
             {% endfor %}
@@ -62,6 +65,9 @@
           <div class="col-md-6">
             <label class="form-label">Confirm password</label>
             {{ form.confirm_password }}
+            <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('confirm_password', this)">
+              Show
+          </button>
             {% for err in form.confirm_password.errors %}
               <div class="text-danger">{{ err }}</div>
             {% endfor %}
@@ -81,5 +87,18 @@
 
     </div>
   </div>
+  <script>
+    function togglePassword(fieldId, btn) {
+        const input = document.getElementById(fieldId);
+        if (input.type === "password") {
+            input.type = "text";
+            btn.textContent = "Hide";
+        } else {
+            input.type = "password";
+            btn.textContent = "Show";
+        }
+    }
+  </script>
+
 </body>
 </html>
