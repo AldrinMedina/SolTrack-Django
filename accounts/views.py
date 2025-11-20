@@ -1,14 +1,27 @@
 import uuid
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.conf import settings
+from django.core import signing
 from django.utils import timezone
+from django.urls import reverse
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.contrib.auth.hashers import make_password
 
 import geopy
 import requests
 
-from .forms import RegistrationForm
-from .models import CustomUser
+from .forms import BuyerUserForm, SellerUserForm, BuyerOrgForm, SellerOrgForm
+from .models import CustomUser, PendingUser
+
+# Token salt
+TOKEN_SALT = 'soltrack-registration-salt'
+TOKEN_MAX_AGE = 3600  # 1 hour in seconds
+
+def _site_url():
+    return getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000')
 
 # Landing page
 def index(request):
@@ -60,43 +73,191 @@ def login_view(request):
 
 
 # Registration view
-def register_view(request):
-    if request.method == "POST":
-        form = RegistrationForm(request.POST, request.FILES)
+# Step 1: Choose role
+def choose_role_view(request):
+    return render(request, 'registration_choose_role.html')
+
+
+# Step 2: User info (creates PendingUser and sends verification email)
+def register_user_info(request, role):
+    role = role.lower()
+    if role not in ('buyer', 'seller'):
+        messages.error(request, "Invalid role selected.")
+        return redirect('choose_role')
+
+    form_class = BuyerUserForm if role == 'buyer' else SellerUserForm
+
+    if request.method == 'POST':
+        form = form_class(request.POST)
         if form.is_valid():
-            address = form.cleaned_data.get('address')
-            user = CustomUser.objects.create_user(
-                email=form.cleaned_data['email'],
-                full_name=form.cleaned_data['full_name'],
-                password=form.cleaned_data['password']
+            data = form.cleaned_data
+            # Hash password for safe storage in pending_user
+            hashed_pw = make_password(data['password'])
+
+            # Create PendingUser row
+            pending = PendingUser(
+                name=data['full_name'],
+                email=data['email'],
+                password=hashed_pw,
+                role=role
             )
-            # user.role = form.cleaned_data.get('role', 'buyer')
-            user.m_address = form.cleaned_data.get('m_address')
-            user.organization = form.cleaned_data.get('organization')
-            user.address = address
 
-            url = f"https://photon.komoot.io/api/?q={address}"
-            response = requests.get(url).json()
+            # generate token and save
+            token_payload = {'pending_id': None, 'email': data['email']}
+            # save without token first to get id if table uses serial PK
+            # we will save token after saving row
+            # Because model has managed=False, we still can .save()
+            pending.token = ''  # placeholder
+            pending.save()
 
-            if response["features"]:
-                coords = response["features"][0]["geometry"]["coordinates"]
-                user.longitude = coords[0]
-                user.latitude = coords[1]
-                
+            token_payload['pending_id'] = pending.id
+            token = signing.dumps(token_payload, salt=TOKEN_SALT)
+            pending.token = token
+            pending.save()
+
+            # Send verification email
+            verify_path = reverse('verify_email', kwargs={'token': token})
+            verify_link = _site_url().rstrip('/') + verify_path
+
+            subject = "Verify your SolTrack account"
+            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+            html_content = render_to_string('email/email_verify.html', {
+                'full_name': data['full_name'],
+                'verify_link': verify_link,
+                'site_name': getattr(settings, 'SITE_NAME', 'SolTrack'),
+            })
+            text_content = f"Hello {data['full_name']},\n\nPlease verify your email by visiting: {verify_link}\n\nThis link expires in 1 hour."
+
+            email = EmailMultiAlternatives(subject, text_content, from_email, [data['email']])
+            email.attach_alternative(html_content, "text/html")
+            email.send(fail_silently=False)
+
+            # redirect to 'check your inbox' page (you can have a template or message)
+            # messages.success(request, "✅ Verification email sent. Please check your inbox (link valid for 1 hour).")
+            request.session['sent_email'] = form.cleaned_data['email']
+            return redirect('email_sent')
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = form_class()
+
+    return render(request, 'registration_user_info.html', {
+        'form': form,
+        'role': role.capitalize()
+    })
+
+
+# Step 3: Verify token
+def verify_email(request, token):
+    try:
+        payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+        pending_id = payload.get('pending_id')
+    except signing.SignatureExpired:
+        messages.error(request, "This verification link has expired. Please register again.")
+        return redirect('choose_role')
+    except signing.BadSignature:
+        messages.error(request, "Invalid verification link.")
+        return redirect('choose_role')
+
+    pending = get_object_or_404(PendingUser, id=pending_id, email=payload.get('email'))
+    # ensure token matches stored value (extra safety)
+    if pending.token != token:
+        messages.error(request, "Token mismatch or invalid link.")
+        return redirect('choose_role')
+
+    pending.is_verified = True
+    pending.save()
+
+    # redirect to organization step, pass token in URL
+    return redirect('register_organization', token=token)
+
+
+# Step 4: Organization info & finalize user creation
+def register_organization(request, token):
+    # validate token again (and ensure verified)
+    try:
+        payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+        pending_id = payload.get('pending_id')
+    except signing.SignatureExpired:
+        messages.error(request, "Verification link expired.")
+        return redirect('choose_role')
+    except signing.BadSignature:
+        messages.error(request, "Invalid link.")
+        return redirect('choose_role')
+
+    pending = get_object_or_404(PendingUser, id=pending_id, email=payload.get('email'))
+
+    if not pending.is_verified:
+        messages.error(request, "Email not verified. Please verify your email first.")
+        return redirect('choose_role')
+
+    role = pending.role.lower()
+    form_class = BuyerOrgForm if role == 'buyer' else SellerOrgForm
+
+    if request.method == 'POST':
+        form = form_class(request.POST, request.FILES)
+        if form.is_valid():
+            cd = form.cleaned_data
+
+            # Create actual CustomUser and set hashed password stored in pending.password
+            # We'll create the user object and assign the hashed password directly
+            user = CustomUser(
+                email=pending.email,
+                full_name=pending.name,
+            )
+            # assign hashed password directly (pending.password already hashed with make_password)
+            user.password = pending.password
+            # other flags
             user.is_active = True
-            user.is_approved = False  # ⛔ requires admin approval
+            user.is_approved = False  # admin approval required
+            user.role = role.capitalize() if hasattr(user, 'role') else role  # keep same style as your other code
+
+            # org fields
+            user.organization = cd.get('organization', '')
+            user.address = cd.get('address', '')
+            user.m_address = cd.get('m_address', '')
+
             uploaded_file = request.FILES.get('business_license')
             if uploaded_file:
+                # If CustomUser.business_license is a BinaryField, read the bytes first.
                 user.business_license = uploaded_file.read()
+
+            # try geocoding address (same as you used earlier)
+            address = user.address
+            if address:
+                try:
+                    url = f"https://photon.komoot.io/api/?q={address}"
+                    response = requests.get(url, timeout=5).json()
+                    if response.get("features"):
+                        coords = response["features"][0]["geometry"]["coordinates"]
+                        user.longitude = coords[0]
+                        user.latitude = coords[1]
+                except Exception:
+                    # silently ignore geocode errors
+                    pass
+
             user.save()
 
-            messages.success(request, "🎉 Account created successfully! Please wait for admin approval before logging in.")
-            return redirect("login")
+            # Delete the pending user record
+            pending.delete()
+
+            messages.success(request, "🎉 Registration complete! Your account has been created and is pending admin approval.")
+            return redirect('login')
         else:
-            messages.error(request, "⚠️ Please fix the errors below.")
+            messages.error(request, "Please correct the errors below.")
     else:
-        form = RegistrationForm()
-    return render(request, "registration.html", {"form": form})
+        form = form_class()
+
+    return render(request, 'registration_organization.html', {
+        'form': form,
+        'role': role.capitalize(),
+        'token': token
+    })
+
+def email_sent_view(request):
+    email = request.session.pop('sent_email', None)
+    return render(request, 'registration_email_sent.html', {'email': email})
+
 
 # Logout view
 def logout_view(request):
