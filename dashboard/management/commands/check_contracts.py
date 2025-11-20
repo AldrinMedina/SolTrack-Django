@@ -3,6 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 from dashboard.models import Contract, IoTData
 from dashboard.views.contract_functions import run_auto_checks_for_all_contracts, Contract
+from dashboard.views.notify_functions import push_event
 import math
 import time
 
@@ -75,7 +76,10 @@ class Command(BaseCommand):
 			log_status("Temperature", "Evaluating temperature window...", "INFO")
 			if contract_temp_out_of_range_for(c, window_seconds=temp_window):
 				log_status("Temperature", f"temp breach detected for contract {contract_id} refunding WARN")
-				execute_onchain_action(c, "refund")
+				ok = execute_onchain_action(c, "refund")
+				if ok:
+					c.status = "Refunded"
+					c.save(update_fields=["status"])
 				if not loop:
 					break
 				time.sleep(30)
@@ -84,7 +88,10 @@ class Command(BaseCommand):
 			log_status("Location", "Evaluating location window...", "INFO")
 			if contract_within_end_coords_for(c, radius_km=loc_radius_km, window_seconds=loc_window):
 				log_status("Location", f"Contract {contract_id} within destination for required window, completing", "OK")
-				execute_onchain_action(c, "complete")
+				ok = execute_onchain_action(c, "complete")
+				if ok:
+					c.status = "Completed"
+					c.save(update_fields=["status"])
 				if not loop:
 					break
 				time.sleep(30)

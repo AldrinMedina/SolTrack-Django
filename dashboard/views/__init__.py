@@ -8,7 +8,9 @@ from .contract_functions import (
 from .download_report import (
 	download_contract_report
 )
-
+from .notify_functions import (
+	poll_contract_updates
+)
 from .main_view import (
 	haversine,
 	_check_delivery_status,

@@ -70,6 +70,7 @@ SUPABASE_HEADERS = {
 }
 
 def get_summarized_log_data(device_id):
+    print("testt")
     readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
     log_summary = []
 
@@ -164,26 +165,28 @@ def get_summarized_log_data(device_id):
 @login_required(login_url='login')
 def shipment_log_view(request, contract_id):
     print(f"[LOG VIEW] Fetching logs for contract {contract_id}")
+    
     try:
-        contract = Contract.objects.get(pk=contract_id)
+        contract = Contract.objects.select_related("IoT_Assigned").get(pk=contract_id)
+
         if not contract.IoT_Assigned:
-            return JsonResponse({"error": "No IoT device assigned to this contract."}, status=404)
+            return JsonResponse({"error": "No IoT device assigned"}, status=404)
 
-        # Use correct field name
-        device_id = contract.IoT_Assigned.device_id
-        print(f"[LOG VIEW] Found IoT device ID: {device_id}")
-
-        summarized_logs = get_summarized_log_data(device_id)
-        print(f"[LOG VIEW] Found {len(summarized_logs)} summarized entries for device {device_id}.")
+        device = contract.IoT_Assigned
+        summarized_logs = get_summarized_log_data(device.device_id)
 
         return JsonResponse({
             "contract_id": contract_id,
-            "device_id": device_id,
+            "product_name": contract.product_name, 
+            "quantity": contract.quantity,
+            "device_name": device.device_name,               
+            "device_id": device.device_id,
             "log": summarized_logs
-        })
-
+            })
+            
     except Contract.DoesNotExist:
         return JsonResponse({"error": f"Contract {contract_id} not found."}, status=404)
+        
     except Exception as e:
         print(f"[LOG VIEW] Error fetching logs for contract {contract_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
@@ -320,8 +323,9 @@ def get_products_by_seller(request, seller_id):
 			'product_id', 
 			'product_name', 
 			'price_eth', 
-			'max_temp', 
-			'quantity_available'
+			'max_temp',
+			'min_temp',
+			'description'
 		))
 		
 		return JsonResponse({'products': product_list})

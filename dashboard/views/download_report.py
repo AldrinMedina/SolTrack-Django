@@ -1,186 +1,299 @@
+# download_report.py (upgraded)
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.db.models import Avg, Min, Max
+from django.templatetags.static import static
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
-from dashboard.models import Contract, IoTDataHistory
+from math import radians, cos, sin, asin, sqrt
+
+from dashboard.models import Contract, IoTData, IoTDataHistory
 from accounts.models import CustomUser
 
+# --- Helpers -----------------------------------------------------------------
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    """Approximate distance in km between two coords."""
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+    # convert decimal degrees to radians
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    km = 6371 * c
+    return km
+
+def format_duration_seconds(secs):
+    if secs is None:
+        return "N/A"
+    if secs < 1:
+        return "<1s"
+    if secs < 60:
+        return f"{int(secs)}s"
+    if secs < 3600:
+        return f"{int(secs//60)}m {int(secs%60)}s"
+    return f"{int(secs//3600)}h {int((secs%3600)//60)}m"
+
+def build_temperature_timeline(readings):
+    """
+    Build time-range timeline:
+      each entry => {"start": datetime, "end": datetime, "temp": float}
+    Only emits ranges when temperature changed (tolerance 0.1°C).
+    """
+    timeline = []
+    if not readings:
+        return timeline
+
+    # convert to list and ensure ordered by recorded_at
+    R = [r for r in readings if r.recorded_at is not None and r.temperature is not None]
+    if not R:
+        return timeline
+
+    current_temp = R[0].temperature
+    start_time = R[0].recorded_at
+
+    for i in range(1, len(R)):
+        r = R[i]
+        if abs(r.temperature - current_temp) >= 0.1:
+            # end previous at previous reading time
+            prev_time = R[i-1].recorded_at
+            timeline.append({"start": start_time, "end": prev_time, "temp": current_temp})
+            current_temp = r.temperature
+            start_time = r.recorded_at
+
+    # final ongoing period
+    last_time = R[-1].recorded_at
+    timeline.append({"start": start_time, "end": last_time, "temp": current_temp})
+    return timeline
+
+def gps_summary_from_readings(readings):
+    """
+    Return a small GPS summary dict:
+      {start_coord, end_coord, distance_km}
+    """
+    latlon = [(r.gps_lat, r.gps_long, r.recorded_at) for r in readings if r.gps_lat is not None and r.gps_long is not None]
+    if not latlon:
+        return {"start": None, "end": None, "distance_km": None, "points": 0}
+    start = latlon[0]
+    end = latlon[-1]
+    dist = haversine_km(start[0], start[1], end[0], end[1])
+    return {"start": (start[0], start[1]), "end": (end[0], end[1]), "distance_km": dist, "points": len(latlon)}
+
+# --- Main report view -------------------------------------------------------
+
 def download_contract_report(request, contract_id):
-	# --- Retrieve Contract + Parties Info ---
-	contract = get_object_or_404(Contract, pk=contract_id)
-	buyer_name = contract.buyer.full_name if contract.buyer else "N/A"
-	buyer_email = contract.buyer.email if contract.buyer else "N/A"
-	buyer_wallet = contract.buyer.m_address if contract.buyer else "N/A"
-	seller_name = contract.seller.full_name if contract.seller else "N/A"
-	seller_email = contract.seller.email if contract.seller else "N/A"
-	seller_wallet = contract.seller.m_address if contract.seller else "N/A"
+    # --- Retrieve Contract + Parties Info ---
+    contract = get_object_or_404(Contract, pk=contract_id)
 
-	# --- IoT Summary (From IoTDataHistory for this contract) ---
-	iot_summary = IoTDataHistory.objects.filter(contract=contract).aggregate(
-		avg_temp=Avg('avg_temp'),
-		min_temp=Min('min_temp'),
-		max_temp=Max('max_temp')
-	)
+    buyer_name = getattr(contract, "buyer_name", None) or (contract.buyer.full_name if getattr(contract, "buyer", None) else None) or "N/A"
+    buyer_email = getattr(contract, "buyer_email", None) or (contract.buyer.email if getattr(contract, "buyer", None) else None) or "N/A"
+    buyer_wallet = getattr(contract, "buyer_address", None) or (getattr(contract.buyer, "m_address", None) if getattr(contract, "buyer", None) else None) or "N/A"
 
-	# --- PDF Setup ---
-	response = HttpResponse(content_type='application/pdf')
-	filename = f"Soltrack_Contract_{contract.contract_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
-	response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    seller_name = getattr(contract, "seller_name", None) or (contract.seller.full_name if getattr(contract, "seller", None) else None) or "N/A"
+    seller_email = getattr(contract, "seller_email", None) or (contract.seller.email if getattr(contract, "seller", None) else None) or "N/A"
+    seller_wallet = getattr(contract, "seller_address", None) or (getattr(contract.seller, "m_address", None) if getattr(contract, "seller", None) else None) or "N/A"
 
-	doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=50, bottomMargin=40)
-	styles = getSampleStyleSheet()
+    # --- IoT data: prefer live IoTData; fallback to IoTDataHistory aggregation if needed ---
+    live_readings = list(IoTData.objects.filter(device__device_id=contract.IoT_Assigned.device_id if getattr(contract, "IoT_Assigned", None) else None).order_by('recorded_at')) if getattr(contract, "IoT_Assigned", None) else []
+    use_hist = False
+    if not live_readings:
+        # fallback to history (older pipeline)
+        iot_summary = IoTDataHistory.objects.filter(contract=contract).aggregate(
+            avg_temp=Avg('avg_temp'),
+            min_temp=Min('min_temp'),
+            max_temp=Max('max_temp')
+        )
+        use_hist = True
+    else:
+        temps = [r.temperature for r in live_readings if r.temperature is not None]
+        iot_summary = {
+            "avg_temp": (sum(temps)/len(temps)) if temps else None,
+            "min_temp": min(temps) if temps else None,
+            "max_temp": max(temps) if temps else None
+        }
 
-	# --- Style Definitions ---
-	title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor("#2563eb"), alignment=TA_CENTER)
-	subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor("#64748b"), alignment=TA_CENTER)
-	section_header = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor("#1e40af"), spaceBefore=15, spaceAfter=8)
-	normal_text = ParagraphStyle('NormalText', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor("#1e293b"))
+    # --- PDF Setup ---
+    response = HttpResponse(content_type='application/pdf')
+    filename = f"Soltrack_Contract_{getattr(contract, 'contract_id', contract_id)}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
-	content = []
+    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=50, bottomMargin=40)
+    styles = getSampleStyleSheet()
 
-	# --- Header ---
-	try:
-		logo = Image("static/img/logo_trans.png", width=1.2*inch, height=1.2*inch)
-		header_table = Table([[logo, Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)]],
-							 colWidths=[1.8*inch, 4.8*inch])
-		header_table.setStyle(TableStyle([
-			('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-			('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-		]))
-		content.append(header_table)
-	except Exception:
-		content.append(Paragraph("<b>SOLTRACK</b>", title_style))
-	content.append(Spacer(1, 10))
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, textColor=colors.HexColor("#2563eb"), alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor("#64748b"), alignment=TA_CENTER)
+    section_header = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor("#1e40af"), spaceBefore=12, spaceAfter=6)
+    normal_text = ParagraphStyle('NormalText', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor("#0f172a"))
 
-	# --- Title ---
-	content.append(Paragraph("Contract Completion Report", title_style))
-	content.append(Paragraph(f"Report Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style))
-	content.append(Spacer(1, 15))
+    content = []
 
-	# --- Contract Info ---
-	content.append(Paragraph("Contract Overview", section_header))
-	contract_data = [
-		['Contract ID', f"#{contract.contract_id}"],
-		['Product Name', contract.product_name],
-		['Quantity', f"{contract.quantity} units"],
-		['Total Value', f"{contract.price} ETH"],
-		['Deployment Date', contract.start_date.strftime('%B %d, %Y') if contract.start_date else "N/A"],
-		['Completion Date', contract.end_date.strftime('%B %d, %Y') if contract.end_date else "N/A"],
-		['Status', contract.status],
-	]
-	contract_table = Table(contract_data, colWidths=[2.2*inch, 4.5*inch])
-	contract_table.setStyle(TableStyle([
-		('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
-		('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor("#1e40af")),
-		('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-		('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-		('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-		('TOPPADDING', (0, 0), (-1, -1), 6),
-		('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-	]))
-	content.append(contract_table)
-	content.append(Spacer(1, 10))
+    # --- Header (logo) ---
+    try:
+        logo_path = static("img/logo_trans.png")  # your static file path
+        logo = Image(logo_path, width=1.1*inch, height=1.1*inch)
+        header_table = Table([[logo, Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)]],
+                             colWidths=[1.4*inch, 4.0*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ]))
+        content.append(header_table)
+    except Exception:
+        content.append(Paragraph("<b>SOLTRACK</b>", title_style))
+    content.append(Spacer(1, 10))
 
-	# --- Parties ---
-	content.append(Paragraph("Parties Involved", section_header))
-	buyer_user = seller_user = deployer_user = None
-	buyer_org = seller_org = deployer_org = "N/A"
-	buyer_wallet = seller_wallet = deployer_wallet = "N/A"
-	try:
-    # --- Buyer ---
-		buyer_user = CustomUser.objects.filter(user_id=contract.buyer_id).first()
-		if buyer_user:
-			buyer_org = getattr(buyer_user, "organization", "N/A")
-			buyer_wallet = getattr(buyer_user, "m_address", contract.buyer_address or "N/A")
-		else:
-			buyer_wallet = contract.buyer_address or "N/A"
+    # --- Title ---
+    content.append(Paragraph("Contract Completion Report", title_style))
+    content.append(Paragraph(f"Report Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style))
+    content.append(Spacer(1, 12))
 
-    # --- Seller ---
-		seller_user = CustomUser.objects.filter(user_id=contract.seller_id).first()
-		if seller_user:
-			seller_org = getattr(seller_user, "organization", "N/A")
-			seller_wallet = getattr(seller_user, "m_address", contract.seller_address or "N/A")
-		else:
-			seller_wallet = contract.seller_address or "N/A"
+    # --- Contract Info ---
+    content.append(Paragraph("Contract Overview", section_header))
+    contract_data = [
+        ['Contract ID', f"#{getattr(contract, 'contract_id', contract_id)}"],
+        ['Product', getattr(contract, 'product_name', 'N/A') or "N/A"],
+        ['Quantity', f"{getattr(contract, 'quantity', 'N/A')}"],
+        ['Total Value', f"{getattr(contract, 'price', 'N/A')}"],
+        ['Deployment Date', getattr(contract, 'start_date', None).strftime('%B %d, %Y') if getattr(contract, 'start_date', None) else "N/A"],
+        ['Completion Date', getattr(contract, 'end_date', None).strftime('%B %d, %Y') if getattr(contract, 'end_date', None) else "N/A"],
+        ['Status', getattr(contract, 'status', 'N/A')],
+    ]
+    contract_table = Table(contract_data, colWidths=[2.2*inch, 4.5*inch])
+    contract_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor("#1e40af")),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    content.append(contract_table)
+    content.append(Spacer(1, 10))
 
-    # --- Deployer (always 10th user by user_id order) ---
-		deployer_user = CustomUser.objects.all().order_by('user_id')[9]  # 10th user (index 9)
-		if deployer_user:
-			deployer_org = getattr(deployer_user, "organization", "N/A")
-			deployer_wallet = getattr(deployer_user, "m_address", "N/A")
-	except Exception as e:
-		print(f"[WARN] Could not fetch organization data: {e}")
+    # --- Parties ---
+    content.append(Paragraph("Parties Involved", section_header))
+    buyer_user = CustomUser.objects.filter(user_id=getattr(contract, 'buyer_id', None)).first() if getattr(contract, 'buyer_id', None) else None
+    seller_user = CustomUser.objects.filter(user_id=getattr(contract, 'seller_id', None)).first() if getattr(contract, 'seller_id', None) else None
 
-		
-	parties_data = [
-		['Buyer', buyer_org],
-		['Buyer Wallet', buyer_wallet],
-		['Seller', seller_org],
-		['Seller Wallet', seller_wallet],
-		#['Deployer', deployer_org],
-		#['Deployer Wallet', deployer_wallet],
-	]
+    buyer_org = getattr(buyer_user, "organization", "N/A") if buyer_user else "N/A"
+    seller_org = getattr(seller_user, "organization", "N/A") if seller_user else "N/A"
 
-	parties_table = Table(parties_data, colWidths=[2.5*inch, 4.2*inch])
-	parties_table.setStyle(TableStyle([
-		('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f8fafc")),
-		('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-		('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-		('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
-		('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-		('TOPPADDING', (0, 0), (-1, -1), 6),
-		('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-	]))
-	content.append(parties_table)
-	content.append(Spacer(1, 15))
+    parties_data = [
+        ['Buyer', buyer_org],
+        ['Buyer Wallet', buyer_wallet],
+        ['Seller', seller_org],
+        ['Seller Wallet', seller_wallet],
+    ]
+    parties_table = Table(parties_data, colWidths=[2.5*inch, 4.2*inch])
+    parties_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f8fafc")),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    content.append(parties_table)
+    content.append(Spacer(1, 12))
 
-	# --- IoT Summary ---
-	content.append(Paragraph("Temperature Monitoring Summary", section_header))
-	temp_status = "Optimal"
-	temp_color = colors.HexColor("#10b981")
-	if iot_summary.get('avg_temp') and (iot_summary['avg_temp'] < -20 or iot_summary['avg_temp'] > 8):
-		temp_status = "Out of Range"
-		temp_color = colors.HexColor("#e80505")
-	final_temp = (
-		f"{iot_summary['avg_temp']:.2f}°C" if iot_summary.get('avg_temp') else "N/A"
-	)
-	iot_data = [
-		['Average Temperature', f"{iot_summary['avg_temp']:.2f}°C" if iot_summary.get('avg_temp') else "N/A"],
-		['Lowest Temp Recorded', f"{iot_summary['min_temp']:.2f}°C" if iot_summary.get('min_temp') else "N/A"],
-		['Highest Temp Recorded', f"{iot_summary['max_temp']:.2f}°C" if iot_summary.get('max_temp') else "N/A"],
-		['Final Temp Recorded', final_temp],
-		['Temperature Status', temp_status],
-	]
-	iot_table = Table(iot_data, colWidths=[2.7*inch, 4*inch])
-	iot_table.setStyle(TableStyle([
-		('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
-		('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-		('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
-		('BACKGROUND', (0, 4), (-1, 4), temp_color),
-		('TEXTCOLOR', (0, 4), (-1, 4), colors.white),
-	]))
-	content.append(iot_table)
-	content.append(Spacer(1, 20))
+    # --- IoT Summary (aggregate) ---
+    content.append(Paragraph("Temperature Monitoring Summary", section_header))
+    avg_t = iot_summary.get('avg_temp') if iot_summary else None
+    min_t = iot_summary.get('min_temp') if iot_summary else None
+    max_t = iot_summary.get('max_temp') if iot_summary else None
 
-	# --- Footer ---
-	footer_text = f"""
-	<para alignment="center">
-	<font size=9 color="#64748b">
-	<b>This report is automatically generated by Soltrack Smart Logistics Platform</b><br/>
-	Verified and secured by blockchain technology on Ethereum Sepolia Testnet<br/>
-	Document ID: SLT-{contract.contract_id}-{datetime.now().strftime('%Y%m%d%H%M')}<br/>
-	© {datetime.now().year} Soltrack. All rights reserved.
-	</font>
-	</para>
-	"""
-	content.append(Paragraph(footer_text, normal_text))
+    iot_data = [
+        ['Average Temperature', f"{avg_t:.2f}°C" if avg_t is not None else "N/A"],
+        ['Lowest Temp Recorded', f"{min_t:.2f}°C" if min_t is not None else "N/A"],
+        ['Highest Temp Recorded', f"{max_t:.2f}°C" if max_t is not None else "N/A"],
+        ['Final Temp Recorded', f"{(live_readings[-1].temperature):.2f}°C" if live_readings and live_readings[-1].temperature is not None else "N/A"],
+    ]
+    iot_table = Table(iot_data, colWidths=[2.7*inch, 4*inch])
+    iot_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+    ]))
+    content.append(iot_table)
+    content.append(Spacer(1, 12))
 
-	# --- Build PDF ---
-	doc.build(content)
-	return response
+    # --- Temperature Timeline (compact ranges) ---
+    content.append(Paragraph("Temperature Timeline", section_header))
+    timeline = build_temperature_timeline(live_readings) if live_readings else []
+    if not timeline and use_hist:
+        # fallback: summarize history records if you have aggregated history entries
+        history_rows = IoTDataHistory.objects.filter(contract=contract).order_by('created_at')[:50]
+        # create a very simple timeline from history averages if available
+        for h in history_rows:
+            if h.avg_temp is None or getattr(h, 'created_at', None) is None:
+                continue
+            content.append(Paragraph(f"{h.created_at.strftime('%Y-%m-%d %H:%M:%S')}: {h.avg_temp:.1f}°C", normal_text))
+    else:
+        # Render compact timeline table
+        if not timeline:
+            content.append(Paragraph("<i>No recent temperature data available.</i>", normal_text))
+        else:
+            tl_rows = []
+            for seg in timeline:
+                s = seg["start"].strftime("%H:%M:%S")
+                e = seg["end"].strftime("%H:%M:%S")
+                temp_disp = f"{seg['temp']:.1f}°C"
+                tl_rows.append([f"{s} → {e}", temp_disp])
+            tl_table = Table(tl_rows, colWidths=[3.5*inch, 3.0*inch])
+            tl_table.setStyle(TableStyle([
+                ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor("#e6eef8")),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('PADDING', (0,0), (-1,-1), 6),
+            ]))
+            content.append(tl_table)
+    content.append(Spacer(1, 12))
+
+    # --- GPS summary ---
+    content.append(Paragraph("GPS Summary", section_header))
+    gps_summary = gps_summary_from_readings(live_readings) if live_readings else {"start": None, "end": None, "distance_km": None, "points": 0}
+    if gps_summary["points"] == 0:
+        content.append(Paragraph("<i>No GPS points available.</i>", normal_text))
+    else:
+        start_coord = gps_summary["start"]
+        end_coord = gps_summary["end"]
+        distance = gps_summary["distance_km"]
+        gps_rows = [
+            ['Points recorded', str(gps_summary["points"])],
+            ['Start (lat, long)', f"{start_coord[0]:.5f}, {start_coord[1]:.5f}"],
+            ['End (lat, long)', f"{end_coord[0]:.5f}, {end_coord[1]:.5f}"],
+            ['Distance travelled (km)', f"{distance:.3f} km" if distance is not None else "N/A"]
+        ]
+        gps_table = Table(gps_rows, colWidths=[2.7*inch, 4*inch])
+        gps_table.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor("#e6eef8")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ]))
+        content.append(gps_table)
+    content.append(Spacer(1, 20))
+
+    # --- Footer ---
+    footer_text = f"""
+    <para alignment="center">
+    <font size=9 color="#64748b">
+    <b>This report is automatically generated by Soltrack Smart Logistics Platform</b><br/>
+    Verified and secured by blockchain technology<br/>
+    Document ID: SLT-{getattr(contract, 'contract_id', contract_id)}-{datetime.now().strftime('%Y%m%d%H%M')}<br/>
+    © {datetime.now().year} Soltrack. All rights reserved.
+    </font>
+    </para>
+    """
+    content.append(Paragraph(footer_text, normal_text))
+
+    # --- Build PDF ---
+    doc.build(content)
+    return response
