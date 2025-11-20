@@ -47,7 +47,6 @@
                             <th class="px-4 py-3">Buyer / Address</th>
                             <th class="px-4 py-3">Seller / Address</th>
                             <th class="px-4 py-3">Contract Address</th>
-                            <th class="px-4 py-3">Quantity</th>
                             <th class="px-4 py-3">Price (ETH)</th>
                             <th class="px-4 py-3 text-center">Actions</th>
                         </tr>
@@ -140,9 +139,10 @@
                                 <tr>
                                     <th>Select</th>
                                     <th>Product Name</th>
-                                    <th>Quantity</th>
-                                    <th>Price (ETH)</th>
+                                    <th>Price</th>
+                                    <th>Description</th>
                                     <th>Max Temp (°C)</th>
+                                    <th>Min Temp (°C)</th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody">
@@ -194,7 +194,7 @@
     
     <small class="form-text text-muted">
       product value +
-        <span id="escrow_fee_display">5.00 ETH</span> 
+        <span id="escrow_fee_display">5.00 USD</span> 
         escrow fee to deployer
     </small>
     
@@ -325,17 +325,19 @@ if (sellerSelect) {
                 row.classList.add("product-row");
                 row.dataset.productId = p.product_id;
                 row.dataset.price = p.price_eth;
+                row.dataset.description = p.description;
                 row.dataset.maxTemp = p.max_temp;
-                row.dataset.quantity = p.quantity_available;
-
+                row.dataset.minTemp = p.min_temp;
                 row.innerHTML = `
                     <td class="text-center align-middle">
                         <input type="radio" name="selected_product" value="${p.product_id}" class="form-check-input product-radio">
                     </td>
                     <td>${p.product_name}</td>
-                    <td>${p.quantity_available}</td>
-                    <td>${p.price_eth} ETH</td>
+                    <td>${p.price_eth}</td>
+                    <td>${p.description}</td>
                     <td>${p.max_temp ?? "N/A"}</td>
+                    <td>${p.min_temp ?? "N/A"}</td>
+
                 `;
                 productTableBody.appendChild(row);
             });

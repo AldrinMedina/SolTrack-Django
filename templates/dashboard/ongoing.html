@@ -142,9 +142,13 @@
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body" id="log-content">
+      <div class="modal-body">
+    <div id="log-extra-info" class="mb-3 p-2 rounded bg-light border"></div>
+
+    <div id="log-content">
         <p class="text-center text-muted">Select a shipment to view logs.</p>
-      </div>
+    </div>
+</div>
     </div>
   </div>
 </div>
@@ -152,7 +156,6 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-console.log("🧠 ongoing.html script loaded");	
 function subscribeToTemperatureStream(contractId) {
     const tempElement = document.getElementById(`live-temp-${contractId}`);
     const row = document.querySelector(`tr[data-contract-id="${contractId}"]`);
@@ -217,29 +220,72 @@ function startTemperatureStreams() {
 function fetchAndDisplayLog(contractId) {
     const logContent = document.getElementById("log-content");
     const idSpan = document.getElementById("log-shipment-id");
+    const infoBox = document.getElementById("log-extra-info");
 
-    // Set shipment ID and placeholder message
     idSpan.textContent = contractId;
     logContent.innerHTML = '<p class="text-center text-primary">Loading summarized log...</p>';
+    infoBox.innerHTML = "";
 
-    fetch(`/dashboard/ongoing/${contractId}/logs/`)
-        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    const url = `/dashboard/ongoing/${contractId}/logs/`;
+    console.log("📡 Fetching:", url);
+
+    fetch(url)
+        .then(async response => {
+            console.log("🔍 Raw response:", response);
+
+            const text = await response.text();
+            console.log("📦 Raw response text:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (err) {
+                console.error("❌ JSON parse failed:", err);
+                throw new Error("Response is not valid JSON. See console output above.");
+            }
+
+            console.log("✅ Parsed JSON:", data);
+            return { ok: response.ok, data };
+        })
         .then(({ ok, data }) => {
-            if (!ok) throw new Error(data.error || "Fetch failed");
 
-            if (data.log && data.log.length > 0) {
-                logContent.innerHTML = data.log.map(entry => `
+            // 🆕 Show shipment details above the log
+            infoBox.innerHTML = `
+                <div><strong>Product:</strong> ${data.product_name}</div>
+                <div><strong>Quantity:</strong> ${data.quantity}</div>
+                <div><strong>IoT Device:</strong> ${data.device_name}</div>
+                <div><strong>Device ID:</strong> ${data.device_id}</div>
+                <hr>
+            `;
+
+            if (!ok) {
+                console.error("❌ Server returned error:", data);
+                logContent.innerHTML =
+                    `<p class="text-danger text-center">Server error: ${data.error}</p>`;
+                return;
+            }
+
+            if (!data.log || data.log.length === 0) {
+                console.log("ℹ️ No log entries returned");
+                logContent.innerHTML =
+                    `<p class="text-center text-muted">No log data available for shipment ${contractId}.</p>`;
+                return;
+            }
+
+            console.log("📝 Rendering log entries:", data.log.length);
+
+            logContent.innerHTML = data.log
+                .map(entry => `
                     <div class="p-2 border-bottom">
                         <span class="fw-bold text-muted">${entry.log_time}:</span>
                         <span>${entry.log_message.replace(/\*\*/g, "<strong>")}</span>
-                    </div>`).join("");
-            } else {
-                logContent.innerHTML = `<p class="text-center text-muted">No log data available for shipment ${contractId}.</p>`;
-            }
+                    </div>
+                `)
+                .join("");
         })
         .catch(err => {
-            console.error("Error fetching log:", err);
-            logContent.innerHTML = `<p class="text-danger text-center">Failed to load log data. ${err.message}</p>`;
+            console.error("❌ Fetch failed:", err);
+            logContent.innerHTML = `<p class="text-danger text-center">Failed to load logs.<br>${err}</p>`;
         });
 }
 

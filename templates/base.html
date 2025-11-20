@@ -1,9 +1,87 @@
 {% include 'includes/header.html' %}
-{% block content %}{% endblock %}
+
+{% block content %}
+<div class="position-fixed bottom-0 end-0 p-3">
+    <div id="toast-container"></div>
+</div>
+
+{% endblock %}
+
 <script>
     const DASHBOARD_DATA_URL = "{% url 'dashboard_data' %}";
     const ONGOING_DATA_URL = "{% url 'ongoing_data_json' %}";
     const SHIPMENT_DETAILS_URL = "{% url 'shipment_details' contract_id=0 %}";
+    
+        function showContractToast(title, message, level="info") {
+    const container = document.getElementById("toast-container");
+
+    const colors = {
+        success: "bg-success text-white",
+        error: "bg-danger text-white",
+        info: "bg-primary text-white"
+    };
+
+    const toast = document.createElement("div");
+    toast.className = "toast " + (colors[level] || colors.info);
+    toast.role = "alert";
+
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <strong>${title}</strong><br>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    new bootstrap.Toast(toast, { delay: 5000 }).show();
+}
+function pollUpdates() {
+    fetch("/dashboard/poll-updates/")
+        .then(r => r.json())
+        .then(data => {
+            (data.events || []).forEach(evt => {
+                if (evt.event === "refunded") {
+                    showContractToast(
+                        "Shipment Refunded",
+                        "Contract " + evt.id + " was automatically refunded.",
+                        "error"
+                    );
+
+                    // Optional: auto-refresh UI
+                    setTimeout(() => location.reload(), 2000);
+                }
+
+                if (evt.event === "completed") {
+                    showContractToast(
+                        "Shipment Completed",
+                        "Contract " + evt.id + " arrived successfully.",
+                        "success"
+                    );
+
+                    // Optional: auto-refresh UI
+                    setTimeout(() => location.reload(), 2000);
+                }
+            });
+        })
+        .catch(err => console.error(err));
+}
+
+setInterval(pollUpdates, 10000);
+
+contractSource.onmessage = function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        showContractToast(data.event, data.contract_id);
+    } catch (e) {
+        console.error("Event parse error:", e);
+    }
+};
+
+setInterval(pollNotifications, 10000);
+
 </script>
 <style>
 @keyframes pulse {
