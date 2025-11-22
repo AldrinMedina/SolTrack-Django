@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.db.models import Count, Avg
 from django.http import JsonResponse
+from django.core.paginator import Paginator
 
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert
 from accounts.models import CustomUser
@@ -40,8 +41,11 @@ def admin_dashboard(request):
 @login_required
 @user_passes_test(is_admin)
 def admin_contracts(request):
-    contracts = Contract.objects.select_related("buyer", "seller").all().order_by("-start_date")
+    contracts_list = Contract.objects.all().order_by("-start_date")
+    paginator = Paginator(contracts_list, 10)  # 10 per page
 
+    page_number = request.GET.get("page")
+    contracts = paginator.get_page(page_number)
     context = {
         "contracts": contracts
     }

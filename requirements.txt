@@ -9,6 +9,7 @@ whitenoise>=6.0.0
 gevent>=23.1.0
 reportlab>=3.6.12
 geopy>=2.2.0
+supabase>=2.24.0
 
 dj-database-url>=1.0.0
 

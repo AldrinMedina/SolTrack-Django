@@ -291,3 +291,39 @@ body {
             width: 1rem;
             height: 1rem;
         }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 1rem 0;
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e5e7eb;
+        }
+
+        .divider::before {
+            margin-right: 1rem;
+        }
+
+        .divider::after {
+            margin-left: 1rem;
+        }
+
+        .text-center a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .text-center a:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
