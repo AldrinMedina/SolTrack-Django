@@ -121,6 +121,33 @@ def send_eth_transaction(from_address, private_key, to_address, amount_eth):
         raise Exception(f"Transaction failed. TX={tx_hash.hex()}. Status={receipt.status}")
 
     return tx_hash.hex(), receipt
+    
+@login_required(login_url='login')
+def deny_contract(request, contract_id):
+    if request.method != "POST":
+        return redirect("active")
+
+    try:
+        contract = Contract.objects.get(contract_id=contract_id)
+    except Contract.DoesNotExist:
+        messages.error(request, "Contract not found.")
+        return redirect("active")
+
+    # Only seller can deny
+    if contract.seller_address != request.user.m_address:
+        messages.error(request, "You are not authorized to deny this contract.")
+        return redirect("active")
+
+    # Only Pending can be denied
+    if contract.status != "Pending":
+        messages.error(request, "Only pending contracts can be denied.")
+        return redirect("active")
+
+    # delete it
+    contract.delete()
+
+    messages.success(request, f"Contract {contract_id} has been denied and removed.")
+    return redirect("active")
 
 @login_required(login_url='login')
 def activate_contract(request, contract_id):

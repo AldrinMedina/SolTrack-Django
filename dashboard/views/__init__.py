@@ -2,8 +2,9 @@ from .contract_functions import (
 	activate_contract,
 	deploy_contract_and_save,
 	create_contract_view,
-	process_contract_action
-	
+	process_contract_action,
+	deny_contract
+
 )
 from .download_report import (
 	download_contract_report

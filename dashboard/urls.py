@@ -32,4 +32,5 @@ urlpatterns = [
     path('sse/contract/<int:contract_id>/temperature/', views.stream_contract_temperature, name='contract_temp_sse'),
     path("ongoing/<int:contract_id>/logs/", views.shipment_log_view, name="shipment_logs"),
     path("poll-updates/", views.poll_contract_updates, name="poll_updates"),
+    path("deny-contract/<int:contract_id>/", views.deny_contract, name="deny_contract_view"),
 ]
