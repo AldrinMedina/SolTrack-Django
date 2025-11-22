@@ -131,7 +131,7 @@ DATABASES = {
 
 SUPABASE_URL = os.getenv('SUPA_REST')
 SUPABASE_KEY = os.getenv('SUPA_SERVICE_KEY')
-SUPABASE_BUCKET = "Organization Documents"
+SUPABASE_BUCKET = "organization_documents"
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
