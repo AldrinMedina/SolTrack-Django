@@ -88,6 +88,12 @@
     >
         Activate Shipment
     </button>
+    <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-danger">
+        Deny
+    </button>
+</form>
     {% endif %}
 </td>
                         </tr>
