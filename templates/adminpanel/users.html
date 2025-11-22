@@ -131,15 +131,15 @@
                                                         <p><strong>Business License:</strong></p>
 
                                                         {# If stored as plain text or base64 #}
-                                                        {% if user.business_license|length < 200 %}
-                                                            <p class="text-muted">{{ user.business_license }}</p>
-
-                                                        {# If stored as a file URL or JSON #}
-                                                        {% elif user.business_license|slice:":4" == "http" %}
-
+                                                        {% if user.business_license|slice:":4" == "http" %}
+                                                            
                                                             <a href="{{ user.business_license }}" target="_blank" class="btn btn-outline-primary btn-sm">
                                                                 View Document
                                                             </a>
+                                                        {# If stored as a file URL or JSON #}
+                                                        {% elif user.business_license|length < 200 %}
+
+                                                            <p class="text-muted">{{ user.business_license }}</p>
 
                                                         {% else %}
                                                             <p class="text-muted small">Document data available (raw text too long to display).</p>

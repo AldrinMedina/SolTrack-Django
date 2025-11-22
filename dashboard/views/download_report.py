@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.db.models import Avg, Min, Max
 from django.templatetags.static import static
+from django.contrib.staticfiles import finders
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -136,17 +137,28 @@ def download_contract_report(request, contract_id):
 
     # --- Header (logo) ---
     try:
-        logo_path = static("img/logo_trans.png")  # your static file path
-        logo = Image(logo_path, width=1.1*inch, height=1.1*inch)
-        header_table = Table([[logo, Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)]],
-                             colWidths=[1.4*inch, 4.0*inch])
-        header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ]))
-        content.append(header_table)
-    except Exception:
-        content.append(Paragraph("<b>SOLTRACK</b>", title_style))
+        logo_path = finders.find("img/logo_trans.png")  # Get actual full path
+
+        if logo_path:
+            logo = Image(logo_path, width=1.1*inch, height=1.1*inch)
+            header_table = Table([
+                [
+                    logo,
+                    Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)
+                ]
+            ], colWidths=[1.4*inch, 4.0*inch])
+            header_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ]))
+            content.append(header_table)
+        else:
+            raise Exception("Logo not found")
+
+    except Exception as e:
+        print("Logo load error:", e)
+    content.append(Paragraph("<b>SOLTRACK</b>", title_style))
+
     content.append(Spacer(1, 10))
 
     # --- Title ---
