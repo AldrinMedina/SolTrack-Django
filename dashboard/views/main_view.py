@@ -971,26 +971,30 @@ def shipment_details_view(request, contract_id):
 def completed_view(request):
     user = request.user
     user_role = request.session.get("user_role", "").lower()
-    m_address = getattr(user, "m_address", None)
+    user_id = request.session.get("user_id")  # same pattern as dashboard
 
     try:
         if user_role == "buyer":
             contracts_queryset = Contract.objects.filter(
-                buyer_address=m_address,
+                buyer_id=user_id,
                 status__in=['Completed', 'Refunded']
             ).order_by('-contract_id')
+
         elif user_role == "seller":
             contracts_queryset = Contract.objects.filter(
-                seller_address=m_address,
+                seller_id=user_id,
                 status__in=['Completed', 'Refunded']
             ).order_by('-contract_id')
-        else:
+
+        else:  # admin
             contracts_queryset = Contract.objects.filter(
                 status__in=['Completed', 'Refunded']
             ).order_by('-contract_id')
+
     except Exception as e:
         print(f"[ERROR] Contract query failed: {e}")
         contracts_queryset = []
+
 
     completed_contracts = []
     for contract_instance in contracts_queryset:

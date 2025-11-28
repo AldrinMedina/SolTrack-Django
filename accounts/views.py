@@ -132,7 +132,11 @@ def register_user_info(request, role):
 
             email = EmailMultiAlternatives(subject, text_content, from_email, [data['email']])
             email.attach_alternative(html_content, "text/html")
-            email.send(fail_silently=False)
+            try:
+                email.send()
+            except Exception as e:
+                print("Email error:", e)
+
 
             # redirect to 'check your inbox' page (you can have a template or message)
             # messages.success(request, "✅ Verification email sent. Please check your inbox (link valid for 1 hour).")
