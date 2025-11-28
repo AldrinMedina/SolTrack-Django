@@ -1,14 +1,11 @@
-from dashboard.utils.web3_balance import get_eth_balance, get_mapped_ganache_address
+from dashboard.utils.web3_balance import get_eth_balance
 
 def wallet_balance(request):
     """Provide ETH balance globally for sidebar."""
     if not request.user.is_authenticated:
         return {}
 
-    user = request.user
-
-    # determine wallet address (Metamask preferred → fallback to Ganache mapping)
-    wallet_addr = user.m_address or get_mapped_ganache_address(user)
+    wallet_addr = request.user.m_address   # always use Sepolia wallet
     eth_balance = get_eth_balance(wallet_addr) if wallet_addr else 0
 
     return {

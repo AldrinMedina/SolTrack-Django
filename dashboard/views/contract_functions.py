@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from dotenv import load_dotenv
 import math
@@ -30,10 +30,24 @@ load_dotenv()
 install_solc('0.5.16')
 set_solc_version('0.5.16')
 
-GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
-web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+#GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
+#web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+TESTNET_RPC_URL = os.getenv("TESTNET_RPC_URL")
+if TESTNET_RPC_URL:
+    RPC_URL = TESTNET_RPC_URL
+    print(f"DEBUG: Using TESTNET RPC URL: {RPC_URL}")
+else:
+    RPC_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545") # Fallback
+    print(f"DEBUG: Falling back to GANACHE URL: {RPC_URL}")
+
+# 4. Initialize web3 using the determined RPC_URL
+web3 = Web3(Web3.HTTPProvider(TESTNET_RPC_URL))
+CHAIN_ID = 11155111  # Sepolia
+DEFAULT_GAS_LIMIT = 350000
+MAX_FEE_GWEI = 2.5
+PRIORITY_FEE_GWEI = 1.5
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
-FIXED_ESCROW_FEE_ETH = 5.00
+FIXED_ESCROW_FEE_ETH = 1.00
 solidity_code = '''
 pragma solidity 0.5.16;
 
@@ -54,6 +68,19 @@ emit Transfer(msg.sender, _to, msg.value);
 
 }
 '''
+def ensure_aware(dt):
+    if dt is None:
+        return None
+    if timezone.is_naive(dt):
+        return timezone.make_aware(dt, dt_timezone.utc)
+    return dt
+
+# Convert to Philippine Time (UTC+8) for display
+def to_ph_time(dt):
+    dt = ensure_aware(dt)
+    if not dt:
+        return None
+    return timezone.localtime(dt, timezone.get_fixed_timezone(480))
 def parse_coords(coord_str):
 	"""Parse 'lat,long' string (e.g. '52.0553813,-2.7151735') → (lat, long) floats."""
 	if not coord_str:
@@ -149,42 +176,44 @@ def deny_contract(request, contract_id):
     messages.success(request, f"Contract {contract_id} has been denied and removed.")
     return redirect("active")
 
-def deploy_contract_on_chain(contract_obj):
-    DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address()
+def deploy_contract_on_chain(contract):
+    """
+    Deploys the contract using the SELLER's wallet instead of Ganache.
+    """
+    seller = CustomUser.objects.get(m_address=contract.seller_address)
+    deployer_address = seller.m_address
+    deployer_pk = seller.private_key
 
-    if not web3.is_connected():
-        raise RuntimeError("Web3 is not connected")
+    compiled = load_compiled_contract()  # you already have this
+    bytecode = compiled["bytecode"]
+    abi = compiled["abi"]
+    Contract = web3.eth.contract(abi=abi, bytecode=bytecode)
 
-    compiled = compile_source(solidity_code)
-    _, contract_interface = compiled.popitem()
+    nonce = web3.eth.get_transaction_count(deployer_address)
 
-    abi = contract_interface["abi"]
-    bytecode = contract_interface["bin"]
-
-    ContractInstance = web3.eth.contract(abi=abi, bytecode=bytecode)
-
-    nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
-    base_fee = web3.eth.fee_history(1, "latest", [10]).baseFeePerGas[-1]
-
-    tx = ContractInstance.constructor().build_transaction({
-        "chainId": web3.eth.chain_id,
-        "from": DEPLOYER_ADDRESS,
+    tx = Contract.constructor(
+        contract.buyer_address,
+        int(contract.price * 10**18),
+        contract.min_temp,
+        contract.max_temp,
+        contract.temperature_time,
+        contract.location_time,
+        contract.radius
+    ).build_transaction({
+        "from": deployer_address,
         "nonce": nonce,
-        "maxFeePerGas": int(base_fee * 2),
-        "maxPriorityFeePerGas": web3.to_wei(2, "gwei"),
-        "gas": 4_000_000,
+        "chainId": CHAIN_ID,
+        "gas": DEFAULT_GAS_LIMIT,
+        "maxFeePerGas": web3.to_wei(MAX_FEE_GWEI, "gwei"),
+        "maxPriorityFeePerGas": web3.to_wei(PRIORITY_FEE_GWEI, "gwei"),
     })
 
-    signed = web3.eth.account.sign_transaction(tx, DEPLOYER_PRIVATE_KEY)
-    tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
-
-    receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+    signed_tx = web3.eth.account.sign_transaction(tx, deployer_pk)
+    tx_hash = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+    receipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
 
     if receipt.status != 1:
-        raise RuntimeError("Contract deployment failed")
-
-    print("DEBUG DEPLOYED ADDRESS =", receipt.contractAddress)
-    print("DEBUG ABI LENGTH =", len(abi))
+        raise Exception("Deployment failed")
 
     return receipt.contractAddress, abi
 
@@ -446,7 +475,7 @@ def create_contract_view(request):
         quantity_raw = request.POST.get("quantity")
 
         ### ⭐ NEW – read configuration fields
-        temp_raw = request.POST.get("temperature_time")
+       
         loc_raw = request.POST.get("location_time")
         rad_raw = request.POST.get("radius")
 
@@ -458,7 +487,6 @@ def create_contract_view(request):
         if not quantity_raw: missing.append("quantity")
 
         ### ⭐ NEW – ensure contract config fields exist
-        if not temp_raw: missing.append("temperature_time")
         if not loc_raw: missing.append("location_time")
         if not rad_raw: missing.append("radius")
 
@@ -476,9 +504,10 @@ def create_contract_view(request):
 
         ### ⭐ NEW – validate config values
         try:
-            temperature_time = int(temp_raw)
-            location_time = int(loc_raw)
-            radius = float(rad_raw)
+            product = Product.objects.get(product_id=product_id)
+            temperature_time = product.temp_time_range   # 🆕 seller defined value
+            location_time = int(request.POST.get("location_time"))
+            radius = int(request.POST.get("radius"))
 
             if temperature_time < 60:
                 raise ValueError("temperature_time")
@@ -547,118 +576,56 @@ def create_contract_view(request):
         return redirect("active")
 
     except Exception as e:
-        logger.exception("create_contract_view exception: %s", e)
         messages.error(request, f"Contract creation failed: {e}")
         return redirect("active")
 
 
 def process_contract_action(request, contract_id):
-	DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address() 
-	action = request.POST.get('action')
+    action = request.POST.get("action")
+    contract_db = Contract.objects.get(contract_id=contract_id)
+    contract = web3.eth.contract(address=contract_db.contract_address, abi=contract_db.contract_abi)
 
-	if request.method != 'POST':
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Invalid request method {request.method} for contract ID {contract_id}.")
-		return HttpResponseRedirect(reverse('active'))
+    # Decide who signs
+    if action == "complete":
+        signer = CustomUser.objects.get(m_address=contract_db.seller_address)
+        contract_func = contract.functions.releaseToSeller
+        new_status = "Completed"
 
-	print(f"[{datetime.now().strftime('%H:%M:%S')}] STARTING ACTION: {action.upper()} for Contract ID: {contract_id}")
+    elif action == "refund":
+        signer = CustomUser.objects.get(m_address=contract_db.buyer_address)
+        contract_func = contract.functions.refundToBuyer
+        new_status = "Refunded"
 
-	try:
-		contract_db = Contract.objects.get(contract_id=contract_id)		
-		amount_eth = Decimal(contract_db.price)
-		AMOUNT_TO_SEND = web3.to_wei(amount_eth, 'ether')
-		
-		if AMOUNT_TO_SEND == 0:
-			raise ValueError("Contract price is zero. Cannot perform payment action.")
-		contract_address = contract_db.contract_address
-		contract_abi = contract_db.contract_abi 		
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] -> DB Retrieved. Contract Address: {contract_address}")
-		
+    else:
+        messages.error(request, "Invalid action")
+        return redirect("active")
 
-		if not web3.is_connected():
-			raise ConnectionError("Web3 not connected. Check RPC URL.")
-			
-		contract = web3.eth.contract(address=contract_address, abi=contract_abi)
-		nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
-		
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] 2. Web3 Setup OK. Nonce: {nonce}. Deployer: {DEPLOYER_ADDRESS}")
-		
-		if action == 'complete':
-			recipient_address = contract_db.seller_address
-			contract_func = contract.functions.Deposit 
-			new_status = 'Completed'
-			print(f"[{datetime.now().strftime('%H:%M:%S')}] 3. ACTION: COMPLETE (Deposit). Payout to Seller: {recipient_address}")
+    signer_address = signer.m_address
+    signer_key = signer.private_key
+    nonce = web3.eth.get_transaction_count(signer_address)
 
-		elif action == 'refund':
-			recipient_address = contract_db.buyer_address
-			contract_func = contract.functions.Refund 
-			new_status = 'Refunded'
-			print(f"[{datetime.now().strftime('%H:%M:%S')}] 3. ACTION: REFUND. Payout to Buyer: {recipient_address}")
-			
-		else:
-			raise ValueError(f"Invalid contract action received: {action}")
-		
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {amount_eth} ETH)") # <-- Now prints the actual price
-		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
-		max_fee = int(estimated_fees * 2)
-		
-		tx_data = contract_func(recipient_address).build_transaction({
-			'chainId': web3.eth.chain_id,
-			'from': DEPLOYER_ADDRESS,
-			'nonce': nonce,
-			'value': AMOUNT_TO_SEND,
-			'maxFeePerGas': max_fee,
-			'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-			'gas':  100000
-		})
-		
-		signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=DEPLOYER_PRIVATE_KEY)
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] -> Transaction signed successfully.")
-		
-		tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] 5. Tx submitted to network. Hash: {tx_hash.hex()}")
-		
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] -> Waiting for transaction receipt...")
-		receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
-		
-		if receipt.status == 1:
-			print(f"[{datetime.now().strftime('%H:%M:%S')}] 6. SUCCESS: Transaction confirmed on chain. Block: {receipt.blockNumber}")
-			try:
-				ca = ContractAddresses.objects.get(contract=contract_db)
-				ca.final_payment_add = tx_hash.hex()
-				ca.save()
-			except ContractAddresses.DoesNotExist:
-				ContractAddresses.objects.create(
-					contract=contract_db,
-					contract_address=contract_db.contract_address,
-					final_payment_add=tx_hash.hex()
-				)
-		else:
-			raise ContractLogicError(f"Transaction failed on-chain. Status: {receipt.status}")
+    tx = contract_func().build_transaction({
+        "from": signer_address,
+        "nonce": nonce,
+        "chainId": CHAIN_ID,
+        "gas": DEFAULT_GAS_LIMIT,
+        "maxFeePerGas": web3.to_wei(MAX_FEE_GWEI, "gwei"),
+        "maxPriorityFeePerGas": web3.to_wei(PRIORITY_FEE_GWEI, "gwei"),
+    })
 
-		contract_db.status = new_status
-		contract_db.save(update_fields=["status"])
-		if contract_db.IoT_Assigned:
-			device = contract_db.IoT_Assigned
-			device.contract = None
-			device.status = "Available"
-			device.save(update_fields=["contract", "status"])
-			print(f"[MANUAL] IoT '{device.device_name}' released from contract {contract_id}")
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] 7. DATABASE UPDATE: Contract ID {contract_id} status updated to {new_status}.")
+    signed = web3.eth.account.sign_transaction(tx, signer_key)
+    tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
+    receipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
 
-		if getattr(contract_db, 'IoT_Assigned', None):
-			record_and_delete_temperature_data(contract_id, contract_db.IoT_Assigned.device_id)
-		
-	except Contract.DoesNotExist:
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Contract ID {contract_id} not found in database.")
-	except ConnectionError as e:
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL ERROR: Web3 connection failed. Details: {e}")
-	except ContractLogicError as e:
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Solidity contract execution failed. Details: {e}")
-	except Exception as e:
-		print(f"[{datetime.now().strftime('%H:%M:%S')}] UNEXPECTED ERROR during contract action: {e}")
-		
-	print(f"[{datetime.now().strftime('%H:%M:%S')}] 8. Redirecting user back to active view.")
-	return HttpResponseRedirect(reverse('active'))
+    ContractAddresses.objects.update_or_create(
+        contract=contract_db,
+        defaults={ "final_payment_add": tx_hash.hex() }
+    )
+
+    contract_db.status = new_status
+    contract_db.save()
+    messages.success(request, f"Transaction confirmed: {tx_hash.hex()}")
+    return redirect("active")
 	
 def record_and_delete_temperature_data(contract_id: int, device_id: int):
 	from dashboard.views.main_view import push_iot_to_supabase

@@ -27,13 +27,14 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone 
+from django.utils.timezone import now, is_naive, make_aware, get_current_timezone, localtime
 from django.http import HttpResponseRedirect, HttpResponse, Http404, JsonResponse, StreamingHttpResponse
 from django.urls import reverse
 from django.db import models
 from django.db.models import Avg, Min, Max, Q
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-
+from datetime import datetime, timedelta, timezone as dt_timezone
 from accounts.models import CustomUser
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
 from dashboard.forms import ProductForm
@@ -44,7 +45,7 @@ load_dotenv()
 install_solc('0.5.16')
 set_solc_version('0.5.16')
 
-SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL")
+SEPOLIA_URL = os.getenv("TESTNET_RPC_URL")
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
 web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 
@@ -68,11 +69,32 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
+def convert_to_ph(dt):
+    """Safely normalize any Supabase timestamp → PH timezone display"""
+    if dt is None:
+        return None
+    # Make timezone-aware if DB returns naive timestamp
+    if is_naive(dt):
+        dt = make_aware(dt, timezone=get_current_timezone())
+    # Convert to settings.TIME_ZONE (Asia/Manila)
+    return localtime(dt)
+def ensure_aware(dt):
+    if dt is None:
+        return None
+    if timezone.is_naive(dt):
+        return timezone.make_aware(dt, dt_timezone.utc)
+    return dt
+
+# Convert to Philippine Time (UTC+8) for display
+def to_ph_time(dt):
+    dt = ensure_aware(dt)
+    if not dt:
+        return None
+    return timezone.localtime(dt, timezone.get_fixed_timezone(480))
 def create_alert(*args, **kwargs):
     return None
 def get_summarized_log_data(device_id):
-    print("testt")
-    readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
+    readings = IoTData.objects.filter(device_id=device_id).order_by("created_at")
     log_summary = []
 
     if not readings.exists():
@@ -81,86 +103,93 @@ def get_summarized_log_data(device_id):
             "log_message": "No IoT readings available for this shipment"
         }]
 
-    # Find first valid reading
-    first_reading = next(
-        (r for r in readings if r.temperature is not None and r.recorded_at is not None),
+    first = next(
+        (r for r in readings if r.temperature is not None and r.created_at is not None),
         None
     )
-    if not first_reading:
+    if not first:
         return [{
             "log_time": "N/A",
-            "log_message": "No temps yet"
+            "log_message": "No temperature records yet."
         }]
 
-    current_temp = first_reading.temperature
-    start_time = first_reading.recorded_at
+    # === Initial values ===
+    current_temp = first.temperature
+    start_time = ensure_aware(first.created_at)
+    prev_time = start_time
+    was_offline = False
 
     for i in range(1, len(readings)):
-        reading = readings[i]
-        temp = reading.temperature
-        end_time = getattr(readings[i - 1], "recorded_at", None)
-
-        if temp is None or reading.recorded_at is None:
-            continue
-        if not start_time or not end_time:
-            print(f"[DEBUG] Skipped None timestamps at index {i} start={start_time}, end={end_time}")
-            continue
-        if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
-            print(f"[DEBUG] Skipped non-datetime types at index {i}: start={type(start_time)}, end={type(end_time)}")
+        r = readings[i]
+        if r.temperature is None or r.created_at is None:
             continue
 
-        if abs(temp - current_temp) >= 0.1:
-            try:
-                duration = end_time - start_time
-                if not isinstance(duration, timedelta):
-                    print(f"time-delta shunt not at {i}: {duration}")
-                    continue
+        new_time = ensure_aware(r.created_at)
+        gap = (new_time - prev_time).total_seconds()
 
-                minutes = int(duration.total_seconds() // 60)
-                seconds = int(duration.total_seconds() % 60)
-                duration_str = f"{minutes}m {seconds}s" if (minutes or seconds) else "less than sec"
+        # OFFLINE GAP DETECTED
+        if gap > 120:  # > 2 minutes gap
+            mins = int(gap // 60)
+            secs = int(gap % 60)
+            duration_str = f"{mins}m {secs}s" if (mins or secs) else "<1s"
 
-                log_summary.append({
-                    "log_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "log_message": (
-                        f"Temp held **{current_temp:.2f} °C** for {duration_str}. "
-                        f"Changed to **{temp:.2f} °C**."
-                    ),
-                })
+            log_summary.append({
+                "log_time": to_ph_time(prev_time).strftime("%Y-%m-%d %H:%M:%S"),
+                "log_message": (
+                    f"⚠ Device offline for **{duration_str}** — no IoT data received."
+                ),
+            })
+            was_offline = True
 
-                current_temp = temp
-                start_time = reading.recorded_at
+        # TEMP CHANGE EVENT
+        if abs(r.temperature - current_temp) >= 0.1:
+            duration = new_time - start_time
+            mins = int(duration.total_seconds() // 60)
+            secs = int(duration.total_seconds() % 60)
+            duration_str = f"{mins}m {secs}s" if (mins or secs) else "<1s"
 
-            except Exception as e:
-                print(f"[DEBUG] Duration calc failed at index {i}: {e}")
-                continue
+            msg = (
+                f"Temp held **{current_temp:.2f}°C** for {duration_str}. "
+                f"Changed to **{r.temperature:.2f}°C**."
+            )
 
-    last_reading = readings.last()
-    end_time = getattr(last_reading, "recorded_at", None)
-    if not start_time or not end_time:
-        print(f"skipped time start={start_time}, end={end_time}")
-        return log_summary
+            # If device just came back online
+            if was_offline:
+                msg = (
+                    f"📡 Device reconnected — resumed at **{r.temperature:.2f}°C**. "
+                    f"Previously offline."
+                )
+                was_offline = False
 
-    try:
-        final_duration = end_time - start_time
-        if isinstance(final_duration, timedelta):
-            minutes = int(final_duration.total_seconds() // 60)
-            seconds = int(final_duration.total_seconds() % 60)
-            duration_str = f"{minutes}m {seconds}s" if (minutes or seconds) else "less than sec"
-        else:
-            duration_str = "unknown duration"
+            log_summary.append({
+                "log_time": to_ph_time(start_time).strftime("%Y-%m-%d %H:%M:%S"),
+                "log_message": msg,
+            })
 
-        log_summary.append({
-            "log_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "log_message": (
-                f"Temp currently **{current_temp:.2f} °C** since "
-                f"{start_time.strftime('%H:%M:%S')} (Duration: {duration_str})."
-            ),
-        })
-    except Exception as e:
-        print(f"[DEBUG] Final duration calc failed: {e}")
+            current_temp = r.temperature
+            start_time = new_time
+
+        prev_time = new_time
+
+    # === Last segment (current temperature duration) ===
+    last = readings.last()
+    last_time = ensure_aware(last.created_at)
+    duration = last_time - start_time
+    mins = int(duration.total_seconds() // 60)
+    secs = int(duration.total_seconds() % 60)
+    duration_str = f"{mins}m {secs}s" if (mins or secs) else "<1s"
+
+    log_summary.append({
+        "log_time": to_ph_time(start_time).strftime("%Y-%m-%d %H:%M:%S"),
+        "log_message": (
+            f"Temp currently **{current_temp:.2f}°C** since "
+            f"{to_ph_time(start_time).strftime('%H:%M:%S')} "
+            f"(Duration: {duration_str})."
+        ),
+    })
 
     return log_summary
+
     
     
 @login_required(login_url='login')
@@ -325,6 +354,7 @@ def get_products_by_seller(request, seller_id):
 			'price_eth', 
 			'max_temp',
 			'min_temp',
+			'temp_time_range',
 			'description'
 		))
 		
@@ -827,75 +857,90 @@ def fetch_adafruit_temp_for_live_display():
 		
 @login_required(login_url='login')
 def ongoing_view(request):
-	user = request.user
-	user_role = request.session.get("user_role", "").capitalize()
+    from django.utils.timezone import make_aware, now
+    from dateutil import tz
 
-	contracts = Contract.objects.filter(status__in=['Ongoing', 'Alert']).order_by('-start_date')
-	if user_role == "Buyer":
-		contracts = contracts.filter(buyer_address=user.m_address)
-	elif user_role == "Seller":
-		contracts = contracts.filter(seller_address=user.m_address)
-	temperature, gps_lat, gps_long = fetch_adafruit_iot_data()
-	if temperature is not None:
-		print(f"Iot data{temperature:.2f}°C, GPS=({gps_lat}, {gps_long})")
-		async_push_iot_to_supabase(
-			temperature=temperature,
-			gps_lat=gps_lat,
-			gps_long=gps_long,
-			device_id=1,
-			
-		)
-	else:
-		print("no data from adafruit/iot")
+    PH_TZ = tz.gettz("Asia/Manila")
+    user = request.user
+    user_role = request.session.get("user_role", "").capitalize()
 
-	ongoing_data = []
-	for contract in contracts:
-		device = getattr(contract, 'IoT_Assigned', None)
-		gps_lat = gps_lon = None
-		current_temp = "N/A"
+    contracts = Contract.objects.filter(status__in=['Ongoing', 'Alert']).order_by('-start_date')
+    if user_role == "Buyer":
+        contracts = contracts.filter(buyer_address=user.m_address)
+    elif user_role == "Seller":
+        contracts = contracts.filter(seller_address=user.m_address)
 
-		if device:
-			latest_data = IoTData.objects.filter(device=device).order_by('-created_at').first()
-		else:
-			latest_data = None	
-			if latest_data:
-				current_temp = latest_data.temperature if latest_data.temperature is not None else "N/A"
-				gps_lat = latest_data.gps_lat
-				gps_lon = latest_data.gps_long
-		address_record = getattr(contract, "address_record", None)
-		init_tx = None
-		if address_record and address_record.init_payment_add:
-			init_tx = address_record.init_payment_add
-		ongoing_data.append({
-			"contract_id": contract.contract_id,
-			"product_name": contract.product_name,
-			"quantity": getattr(contract, "quantity", 0),
-			"price": str(getattr(contract, "price", "0")),   # convert Decimal to str for templates if needed
-			"status": contract.status,
-			"min_temp": getattr(contract, "min_temp", None),
-			"max_temp": getattr(contract, "max_temp", None),
-			"contract_address": contract.contract_address,
-			"buyer_address": contract.buyer_address,
-			"seller_address": contract.seller_address,
-			"buyer_name": contract.buyer.full_name if getattr(contract, "buyer", None) else "",
-			"seller_name": contract.seller.full_name if getattr(contract, "seller", None) else "",
-			"current_temp": current_temp,
-			"gps_lat": gps_lat,
-			"gps_long": gps_lon,
-			"current_location": (
-				f"{gps_lat:.4f}, {gps_lon:.4f}"
-				if (gps_lat is not None and gps_lon is not None)
-				else "N/A"
-			),
-			"init_payment": init_tx or "Not available",
-		})
-	context = {
-		"ongoing_data": ongoing_data,
-		"role": user_role,
-	}
+    ongoing_data = []
+    for contract in contracts:
+        device = getattr(contract, "IoT_Assigned", None)
 
-	return render(request, "dashboard/ongoing.html", context)
-	
+        current_temp = "N/A"
+        gps_lat = gps_lon = None
+        last_update_dt = None      # datetime for timesince()
+        last_update_str = "No IoT data yet"
+        offline = False
+
+        # ===== IoT Latest Reading =====
+        if device:
+            latest = IoTData.objects.filter(device=device).order_by("-created_at").first()
+
+            if latest:
+                current_temp = latest.temperature if latest.temperature is not None else "N/A"
+                gps_lat = latest.gps_lat
+                gps_lon = latest.gps_long
+
+                created_at = latest.created_at
+
+                # Ensure timezone aware
+                if created_at.tzinfo is None:
+                    created_at = make_aware(created_at, timezone=dt_timezone.utc)
+
+                created_at_ph = created_at.astimezone(PH_TZ)
+                last_update_dt = created_at_ph
+                last_update_str = last_update_dt.strftime("%Y-%m-%d %H:%M:%S")
+                # Offline detection
+                seconds_since = (now() - created_at).total_seconds()
+                if seconds_since > 120:        # > 2 mins
+                    offline = True
+
+        # ===== Payment TX Hash =====
+        address_record = getattr(contract, "address_record", None)
+        init_tx = address_record.init_payment_add if address_record and address_record.init_payment_add else "Not available"
+
+        # ===== Final dataset =====
+        ongoing_data.append({
+            "contract_id": contract.contract_id,
+            "product_name": contract.product_name,
+            "quantity": contract.quantity,
+            "price": str(contract.price),
+            "status": contract.status,
+            "min_temp": contract.min_temp,
+            "max_temp": contract.max_temp,
+            "contract_address": contract.contract_address,
+            "buyer_address": contract.buyer_address,
+            "seller_address": contract.seller_address,
+            "buyer": contract.buyer,
+            "seller": contract.seller,
+            "current_temp": current_temp,
+            "gps_lat": gps_lat,
+            "gps_long": gps_lon,
+            "current_location": (
+                f"{gps_lat:.4f}, {gps_lon:.4f}"
+                if (gps_lat is not None and gps_lon is not None)
+                else "N/A"
+            ),
+            "init_payment": init_tx,
+
+            # IoT health + human time
+            "offline": offline,
+            "last_update_dt": last_update_dt,    # datetime → used with `timesince`
+            "last_update_str": last_update_str,  # text → PH formatted timestamp
+        })
+
+    return render(request, "dashboard/ongoing.html", {
+        "ongoing_data": ongoing_data,
+        "role": user_role,
+    })
 @login_required(login_url='login')
 def ongoing_data_json(request):
 	user = request.user
@@ -978,19 +1023,19 @@ def completed_view(request):
 
     try:
         if user_role == "buyer":
-            contracts_queryset = Contract.objects.filter(
-                buyer_address=m_address,
-                status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+         contracts_queryset = Contract.objects.filter(
+          buyer_address=m_address,
+          status__in=['Completed', 'Refunded']
+         ).order_by('-contract_id')
         elif user_role == "seller":
-            contracts_queryset = Contract.objects.filter(
-                seller_address=m_address,
-                status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+         contracts_queryset = Contract.objects.filter(
+          seller_address=m_address,
+          status__in=['Completed', 'Refunded']
+         ).order_by('-contract_id')
         else:
-            contracts_queryset = Contract.objects.filter(
-                status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+         contracts_queryset = Contract.objects.filter(
+          status__in=['Completed', 'Refunded']
+         ).order_by('-contract_id')
     except Exception as e:
         print(f"[ERROR] Contract query failed: {e}")
         contracts_queryset = []

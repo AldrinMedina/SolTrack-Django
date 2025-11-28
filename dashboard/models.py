@@ -136,9 +136,9 @@ class Product(models.Model):
     quantity_available = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    min_temp = models.FloatField(default=2)  # Minimum temperature in °C
-    max_temp = models.FloatField(default=8)  # Maximum temperature in °C
-
+    min_temp = models.FloatField(default=2)
+    max_temp = models.FloatField(default=8)
+    temp_time_range = models.IntegerField(default=60) 
     class Meta:
         db_table = 'products'
         managed = False  # Prevent Django from managing this table
