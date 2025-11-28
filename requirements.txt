@@ -12,6 +12,7 @@ geopy>=2.2.0
 supabase>=2.24.0
 Adafruit_IO>=1.1.7
 setuptools>=67.0.0
+django-sendgrid-v5>=0.11.0
 
 dj-database-url>=1.0.0
 
