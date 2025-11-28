@@ -58,14 +58,14 @@ INSTALLED_APPS = [
     'dashboard',
     'adminpanel'
 ]
-
+#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('MAILER_EMAIL')
 EMAIL_HOST_PASSWORD = os.getenv('MAILER_PASSWORD')
-DEFAULT_FROM_EMAIL = 'SolTrack <noreply@gmail.com>'
+DEFAULT_FROM_EMAIL = 'soltrack2024@gmail.com'
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
 SENDGRID_SANDBOX_MODE_IN_DEBUG = False
 

@@ -34,7 +34,7 @@ set_solc_version('0.5.16')
 GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
 web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
-FIXED_ESCROW_FEE_ETH = 5.00
+FIXED_ESCROW_FEE_ETH = 0.005
 solidity_code = '''
 pragma solidity 0.5.16;
 
