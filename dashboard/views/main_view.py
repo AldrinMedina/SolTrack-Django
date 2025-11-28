@@ -360,7 +360,7 @@ def _check_delivery_status(contract_db):
 		current_lon = latest_data.gps_long
 		
 		if current_lat is None or current_lon is None:
-			 return 0.0, "Tracking N/A"
+			return 0.0, "Tracking N/A"
 		
 	except IoTData.DoesNotExist:
 		return 0.0, "No GPS Data"
@@ -627,11 +627,11 @@ def active_view(request):
 	print(request.session.get("m_address"))
 
 	if user_role == "buyer":
-	 contracts_base_query = Contract.objects.filter(buyer_address=request.user.m_address)
-	 print('buyer')
+		contracts_base_query = Contract.objects.filter(buyer_address=request.user.m_address)
+		print('buyer')
 	elif user_role == "seller":
-	 contracts_base_query = Contract.objects.filter(seller_address=request.user.m_address)
-	 print('seller')
+		contracts_base_query = Contract.objects.filter(seller_address=request.user.m_address)
+		print('seller')
 
 	# 2. Status Filter: Only show contracts for the 'Active' tab.
 	# Includes 'Pending' (activatable), 'Active', 'Ongoing', and 'In Transit'.
@@ -639,15 +639,15 @@ def active_view(request):
 		status__in=['Pending', 'Active', 'Ongoing', 'In Transit']
 	).order_by('-start_date')
 	try:
-	 sellers = CustomUser.objects.filter(
-	   role__iexact='seller'
-	 ).exclude(
-	   pk=request.user.pk
-	 )
+		sellers = CustomUser.objects.filter(
+			role__iexact='seller'
+		).exclude(
+			pk=request.user.pk
+		)
 	except Exception as e:
 	# Print error if the 'role' field does not exist on CustomUser
-	  print(f"ERROR fetching sellers: {e}")
-	  sellers = []
+		print(f"ERROR fetching sellers: {e}")
+		sellers = []
 	
 
 
@@ -817,7 +817,7 @@ def fetch_adafruit_temp_for_live_display():
 		# This catches errors like 'Feed not found' or 'No data' (404/204 status codes)
 		print(f"adafruit IO Request Error (Check TEMP_FEED name/data): {e}")
 		return None
-	except AdafruitIO_Errors as e:
+	except AdafruitIOError as e:
 		# This is often an authentication error (401 Unauthorized)
 		print(f"adafruit IO auth error (Check USERNAME/KEY): {e}")
 		return None
@@ -1029,51 +1029,83 @@ def completed_view(request):
 def alerts_view(request):
     user = request.user
 
-    # ===== CHECK USER ROLE =====
-    user_role = user.role  # Assuming you have a 'role' field in your User model
+    # ===== GET USER ROLE (LOWERCASE) =====
+    user_role = request.session.get("user_role", "").lower()
+
+    # Base Query
+    alerts = Alert.objects.filter(status='Active')
 
     # ===== ADMIN: SEE ALL ALERTS =====
-    if user_role == "Admin":
-        alerts = Alert.objects.filter(status='Active')
+    if user_role == "admin":
+        pass  # Keep full alerts queryset
 
     else:
-        # ===== BUYER: ALERTS WHERE HE IS THE BUYER =====
+        # ===== CONTRACTS FOR BUYER =====
         buyer_contracts = Contract.objects.filter(
             buyer_id=user.id
         ).values_list('contract_id', flat=True)
 
-        # ===== SELLER: ALERTS WHERE HE IS THE SELLER =====
+        # ===== CONTRACTS FOR SELLER =====
         seller_contracts = Contract.objects.filter(
             seller_id=user.id
         ).values_list('contract_id', flat=True)
 
-        # ===== CONTRACT-BASED ALERTS =====
-        alerts = Alert.objects.filter(
-            Q(contract_id__in=buyer_contracts) |
-            Q(contract_id__in=seller_contracts)
-        )
-
-        # ===== If alerts have IoT devices =====
-        # This will automatically include alerts triggered by IoT devices under the user's contracts
+        # ===== DEVICES UNDER THOSE CONTRACTS =====
         device_ids = IoTDevice.objects.filter(
             contract_id__in=list(buyer_contracts) + list(seller_contracts)
         ).values_list('device_id', flat=True)
 
-        alerts = alerts | Alert.objects.filter(
-            iot_device_id__in=device_ids
+        # ===== FILTER ALERTS THAT BELONG TO THE USER =====
+        user_alerts = Alert.objects.filter(
+            Q(contract_id__in=buyer_contracts) |
+            Q(contract_id__in=seller_contracts) |
+            Q(device_id__in=device_ids)
         )
 
-        # Remove duplicates
-        alerts = alerts.distinct()
+        # ===== ROLE-BASED VISIBILITY RULES (OPTION D) =====
 
-    # Ordering and optional filters
+        # === ALERTS FOR ALL USERS ===
+        common_alerts = user_alerts.filter(
+            alert_type__in=[
+                "Warning", "Danger", "Success", "Refund",
+                "IoT Disconnect", "IoT Reconnect"
+            ]
+        )
+
+        # === BUYER-SPECIFIC ALERTS ===
+        if user_role == "buyer":
+            buyer_alerts = user_alerts.filter(
+                alert_type__in=[
+                    "Approve Contract",
+                    "Denied Contract",
+                    "Shipping Start"
+                ]
+            )
+            alerts = (common_alerts | buyer_alerts).distinct()
+
+        # === SELLER-SPECIFIC ALERTS ===
+        elif user_role == "seller":
+            seller_alerts = user_alerts.filter(
+                alert_type="New Pending - Seller"
+            )
+            alerts = (common_alerts | seller_alerts).distinct()
+
+        else:
+            # Unknown role — only show alerts common to all
+            alerts = common_alerts.distinct()
+
+    # ===== ORDERING =====
     alerts = alerts.order_by('-triggered_at')
 
+    # ===== OPTIONAL CATEGORY FILTER =====
     category = request.GET.get('category')
     if category:
         alerts = alerts.filter(category=category)
 
-    return render(request, 'dashboard/alerts.html', {'alerts': alerts})
+    return render(request, 'dashboard/alerts.html', {
+        'alerts': alerts
+    })
+ 
 
 def analytics_view(request):
 	return render(request, 'dashboard/analytics.html')

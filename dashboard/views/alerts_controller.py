@@ -5,24 +5,6 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 
-
-def create_alert(contract=None, device=None, alert_type='Notice', message='', severity='Warning',
-                 category='System', metadata=None):
-    if metadata is None:
-        metadata = {}
-    return Alert.objects.create(
-        contract=contract,
-        device=device,
-        alert_type=alert_type,
-        alert_message=message,
-        severity=severity,
-        status='Active',
-        is_read=False,
-        category=category,
-        metadata=metadata,
-        triggered_at=timezone.now()
-    )
-
 @login_required
 def clear_all_alerts(request):
     if request.method == 'POST':

@@ -25,6 +25,7 @@ from accounts.models import CustomUser
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product, ContractAddresses
 from dashboard.forms import ProductForm 
 from .contract_watchers import start_watcher
+from dashboard.utils.alerts_helper import create_alert
 load_dotenv()
 
 install_solc('0.5.16')
@@ -142,6 +143,14 @@ def deny_contract(request, contract_id):
     if contract.status != "Pending":
         messages.error(request, "Only pending contracts can be denied.")
         return redirect("active")
+
+    create_alert(
+		contract=contract,
+		alert_type="Denied Contract",
+		message=f"Seller denied contract #{contract.contract_id}.",
+		severity="Warning",
+		category="Contract"
+	)
 
     # delete it
     contract.delete()
@@ -334,6 +343,14 @@ def activate_contract(request, contract_id):
             start_watcher(contract.contract_id)
             contract.start_date = timezone.now()
             contract.save()
+            create_alert(
+				contract=contract,
+				alert_type="Approve Contract",
+				message=f"Contract #{contract.contract_id} has been approved and moved to Ongoing.",
+				severity="Info",
+				category="Contract"
+			)
+
             print(f"[DEBUG] Contract {contract_id} marked Ongoing")
 
     except Exception as e:
@@ -351,10 +368,23 @@ def activate_contract(request, contract_id):
     # ------------------------------------------------
     # Success
     # ------------------------------------------------
+
+	
+
     messages.success(
         request,
         f"Contract activated and deployed at {contract.contract_address}. TX: {ca.init_payment_add}"
     )
+
+    create_alert(
+		contract=contract,
+		device=device,
+		alert_type="Shipping Start",
+		message=f"Contract #{contract.contract_id} has been activated and shipment has started.",
+		severity="Info",
+		category="Contract"
+	)
+
     return HttpResponseRedirect(reverse('active'))
 
 def deploy_contract_and_save(
@@ -542,6 +572,14 @@ def create_contract_view(request):
             location_time=location_time,
             radius=radius,
         )
+
+        create_alert(
+			contract=Contract.objects.get(contract_id=next_id),
+			alert_type="New Pending - Seller",
+			message=f"New pending contract #{next_id} awaiting your approval.",
+			severity="Info",
+			category="Contract"
+		)
 
         messages.success(request, f"Contract created and saved (id {next_id}). Awaiting seller activation.")
         return redirect("active")
@@ -775,6 +813,23 @@ def execute_onchain_action(contract_db, action):
 		receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
 
 		if receipt.status == 1:
+			if new_status == 'Refunded':
+				create_alert(
+					contract=contract_db,
+					alert_type="Refund",
+					message=f"Contract #{contract_db.contract_id} has been refunded.",
+					severity="Warning",
+					category="Contract"
+				)
+			elif new_status == 'Completed':
+				create_alert(
+					contract=contract_db,
+					alert_type="Completed",
+					message=f"Contract #{contract_db.contract_id} has been completed successfully.",
+					severity="Info",
+					category="Contract"
+				)
+
 			try:
 				from dashboard.models import IoTData, IoTDevice
 				last = IoTData.objects.filter(contract=contract_db).order_by("-timestamp").first()
@@ -883,10 +938,28 @@ def contract_temp_out_of_range_for(contract_db, window_seconds=300):
 		violation_duration = max(violation_duration, segment_duration)
 
 	if violation_duration > 0:
+		create_alert(
+			contract=contract_db,
+			device=device,
+			alert_type="Warning",
+			message=f"Temperature exceeded safe range for {violation_duration:.0f} seconds.",
+			severity="Warning",
+			category="Temperature"
+		)
+
 		percent = (violation_duration / window_seconds) * 100
 		print(f"{contract_db.contract_id}  temp breached {violation_duration:.1f} / {window_seconds} secs ({percent:.1f}%).")
 
 	if violation_duration >= window_seconds:
+		create_alert(
+			contract=contract_db,
+			device=device,
+			alert_type="Danger",
+			message=f"Temperature breach exceeded allowable time. Contract will be refunded.",
+			severity="Critical",
+			category="Temperature"
+		)
+
 		print(f"{contract_db.contract_id} temp breached{violation_duration:.1f}s refunding")
 		return True
 
