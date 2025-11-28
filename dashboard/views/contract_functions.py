@@ -55,6 +55,8 @@ emit Transfer(msg.sender, _to, msg.value);
 
 }
 '''
+print("WEB3 CONNECTED:", web3.is_connected(), "CHAIN:", web3.eth.chain_id if web3.is_connected() else "N/A")
+
 def parse_coords(coord_str):
 	"""Parse 'lat,long' string (e.g. '52.0553813,-2.7151735') → (lat, long) floats."""
 	if not coord_str:
