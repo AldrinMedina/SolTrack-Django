@@ -8,7 +8,7 @@
             <h2 class="fw-bold text-white mb-2">Active Alerts</h2>
             <p class="text-white opacity-75">Temperature breaches and system notifications</p>
         </div>
-        <button class="btn btn-outline-light" onclick="clearAllAlerts()">
+        <button id="clearAllBtn" class="btn btn-outline-light">
             <i class="bi bi-check-all me-2"></i>Clear All
         </button>
     </div>
@@ -46,14 +46,13 @@
 
                 <div class="ms-3">
                     {% if alert.severity == 'Critical' %}
-                        <button class="btn btn-danger btn-sm">
-                            <i class="bi bi-telephone"></i> Call
-                        </button>
+                        <button class="btn btn-danger btn-sm"> <i class="bi bi-telephone"></i> Call </button>
                     {% elif alert.severity == 'Warning' %}
-                        <button class="btn btn-warning btn-sm">
-                            <i class="bi bi-tools"></i> Check
-                        </button>
+                        <button class="btn btn-warning btn-sm"> <i class="bi bi-tools"></i> Check </button>
                     {% endif %}
+                    <button class="btn btn-sm btn-light ms-1 mark-read-btn" data-id="{{ alert.alert_id }}">
+                        <i class="bi bi-bookmark-check"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -64,4 +63,26 @@
         {% endfor %}
     </div>
 </div>
+<script>
+    document.getElementById('clearAllBtn').addEventListener('click', async () => {
+        if (!confirm('Clear all active alerts?')) return;
+            const resp = await fetch("{% url 'clear_all_alerts' %}", {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'}
+            });
+            if (resp.ok) location.reload();
+            else alert('Failed to clear alerts');
+        });
+
+        document.querySelectorAll('.mark-read-btn').forEach(btn=>{
+        btn.addEventListener('click', async e=>{
+            const id = btn.dataset.id;
+            const resp = await fetch(`/alerts/mark_read/${id}/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'}
+            });
+            if (resp.ok) btn.closest('.col-12').style.opacity = 0.6; // visual feedback
+        });
+    });
+</script>
 {% endblock %}

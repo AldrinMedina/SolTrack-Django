@@ -1,5 +1,6 @@
 from django.db import models
 from accounts.models import CustomUser
+from django.utils import timezone
 
 class Contract(models.Model):
     # Matches DB: SERIAL PRIMARY KEY -> IntegerField
@@ -72,6 +73,8 @@ class IoTDevice(models.Model):
     adafruit_feed = models.CharField(max_length=255)
     status = models.CharField(max_length=50, default='Active')
     created_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    connection_status = models.CharField(max_length=50, default='Connected')
 
     class Meta:
         db_table = 'iot_devices'
@@ -93,17 +96,27 @@ class IoTDataHistory(models.Model):
 
 
 class Alert(models.Model):
+    ALERT_SEVERITY = (
+        ('Critical', 'Critical'),
+        ('Warning', 'Warning'),
+        ('Info', 'Info'),
+    )
     alert_id = models.AutoField(primary_key=True)
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, db_column='contract_id')
-    alert_type = models.CharField(max_length=50)
+    contract = models.ForeignKey(Contract, null=True, blank=True, on_delete=models.SET_NULL)
+    device = models.ForeignKey(IoTDevice, null=True, blank=True, on_delete=models.SET_NULL)
+    alert_type = models.CharField(max_length=255)
     alert_message = models.TextField()
-    severity = models.CharField(max_length=20)
-    status = models.CharField(max_length=20)
-    triggered_at = models.DateTimeField()
+    severity = models.CharField(max_length=20, choices=ALERT_SEVERITY, default='Warning')
+    status = models.CharField(max_length=50, default='Active')
+    is_read = models.BooleanField(default=False)
+    category = models.CharField(max_length=50, default='System')
+    metadata = models.JSONField(default=dict, blank=True)  # Django 3.1+
+    triggered_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'alerts'
-        managed = False
+        managed = False  # important — this prevents Django from altering your real table
+
 
 class IoTData(models.Model):
     data_id = models.AutoField(primary_key=True)

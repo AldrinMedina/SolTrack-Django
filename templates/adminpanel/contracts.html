@@ -102,6 +102,47 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                <!-- Pagination -->
+                <div class="d-flex justify-content-center mt-4">
+                    <nav>
+                        <ul class="pagination pagination-sm">
+
+                            {% if contracts.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ contracts.previous_page_number }}">&laquo;</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">&laquo;</span>
+                            </li>
+                            {% endif %}
+
+                            {% for num in contracts.paginator.page_range %}
+                                {% if num == contracts.number %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if contracts.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ contracts.next_page_number }}">&raquo;</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">&raquo;</span>
+                            </li>
+                            {% endif %}
+
+                        </ul>
+                    </nav>
+                </div>
+
             </div>
         </div>
     </div>

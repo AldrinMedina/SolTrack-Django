@@ -13,6 +13,8 @@ from django.contrib.auth.hashers import make_password
 import geopy
 import requests
 
+import time
+from .supabase_client import supabase
 from .forms import BuyerUserForm, SellerUserForm, BuyerOrgForm, SellerOrgForm
 from .models import CustomUser, PendingUser
 
@@ -214,13 +216,52 @@ def register_organization(request, token):
 
             # org fields
             user.organization = cd.get('organization', '')
-            user.address = cd.get('address', '')
+            
+            # ----- Address Fields -----
+            region = cd.get("region")
+            province = cd.get("province")
+            city = cd.get("city")
+            barangay = cd.get("barangay")
+            full_address_input = cd.get("full_address")
+
+            # Build full final address
+            if full_address_input:
+                final_address = f"{full_address_input}, {barangay}, {city}, {province}, {region}, Philippines"
+            else:
+                final_address = f"{barangay}, {city}, {province}, {region}, Philippines"
+
+            user.address = final_address  # save combined address
             user.m_address = cd.get('m_address', '')
 
-            uploaded_file = request.FILES.get('business_license')
-            if uploaded_file:
-                # If CustomUser.business_license is a BinaryField, read the bytes first.
-                user.business_license = uploaded_file.read()
+            uploaded_files = request.FILES.getlist('business_license')
+
+            if uploaded_files:
+                uploaded_urls = []
+
+                for f in uploaded_files:
+                    file_bytes = f.read()
+
+                    timestamp = int(time.time())
+                    path = f"business_license/{pending.id}_{timestamp}_{f.name}"
+
+                    response = supabase.storage.from_(settings.SUPABASE_BUCKET).upload(
+                        path,
+                        file_bytes,
+                        file_options={"content-type": f.content_type}
+                    )
+
+                    print("UPLOAD RESPONSE:", response.__dict__)  # ⭐ RUN ONCE TO SEE STRUCTURE
+
+                    # universal success check
+                    if getattr(response, "error", None) in [None, {}, ""]:
+                        public_url = supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(path)
+                        uploaded_urls.append(public_url)
+                    else:
+                        print("Supabase upload error:", response.error)
+
+
+                # Save as JSON list of URLs or comma-separated
+                user.business_license = ";".join(uploaded_urls)
 
             # try geocoding address (same as you used earlier)
             address = user.address

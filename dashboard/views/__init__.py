@@ -39,3 +39,9 @@ from .main_view import (
 	stream_contract_temperature,
 	shipment_log_view,
 )
+
+from .alerts_controller import (
+	clear_all_alerts,
+	mark_alert_read,
+	create_alert,
+)

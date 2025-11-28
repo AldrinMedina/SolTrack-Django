@@ -45,14 +45,47 @@
           {% endfor %}
         </div>
 
+
+
         <!-- Address -->
         <div class="mb-3">
           <label class="form-label">Address</label>
-          {{ form.address }}
+          
+
+          <!-- Region -->
+          <select id="region" name="region" class="form-select mb-2">
+            <option value="">Select Region</option>
+            {% for value, label in form.region.field.choices %}
+              <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+
+          <!-- Province -->
+          <select id="province" name="province" class="form-select mb-2">
+            <option value="">Select Province</option>
+          </select>
+
+          <!-- City -->
+          <select id="city" name="city" class="form-select mb-2">
+            <option value="">Select City/Municipality</option>
+          </select>
+
+          <!-- Barangay -->
+          <select id="barangay" name="barangay" class="form-select">
+            <option value="">Select Barangay</option>
+          </select>
+
           {% for err in form.address.errors %}
             <div class="text-danger">{{ err }}</div>
           {% endfor %}
         </div>
+
+        <div class="mb-3">
+          <label class="form-label">Full Address (Optional)</label>
+          {{ form.full_address }}
+          <small class="text-muted">If your organization has a specific location or building name, enter it here.</small>
+        </div>
+
 
         <!-- MetaMask Address -->
         <div class="mb-3">
@@ -72,15 +105,17 @@
         </div>
 
         <!-- Business License (Seller only) -->
-        {% if form.business_license %}
         <div class="mb-4">
-          <label class="form-label">Business License</label>
+          <label class="form-label">Organization Documents</label>
+          <p class="text-muted small mb-2">
+            Upload supporting documents for verification (e.g., SEC Registration, DTI Permit,
+            Company ID, Proof of Address, etc.)
+          </p>
           {{ form.business_license }}
           {% for err in form.business_license.errors %}
             <div class="text-danger">{{ err }}</div>
           {% endfor %}
         </div>
-        {% endif %}
 
         <!-- Buttons -->
         <div class="d-flex gap-2 align-items-center justify-content-center mt-4">
@@ -117,6 +152,68 @@
         alert('Failed to connect MetaMask.');
       }
     });
+
+    // Load hierarchy data (export your JSON as static)
+    fetch("{% static 'geo/philippines.json' %}")
+      .then(response => response.json())
+      .then(data => {
+        const regionSelect = document.getElementById("region");
+        const provinceSelect = document.getElementById("province");
+        const citySelect = document.getElementById("city");
+        const barangaySelect = document.getElementById("barangay");
+
+        let regions = data;
+
+        regionSelect.addEventListener("change", () => {
+          const selected = regionSelect.value;
+          provinceSelect.innerHTML = '<option value="">Select Province</option>';
+          citySelect.innerHTML = '<option value="">Select City</option>';
+          barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+
+          if (!selected) return;
+
+          const provinces = regions.find(r => r.code === selected).provinces;
+
+          provinces.forEach(p => {
+            provinceSelect.innerHTML += `<option value="${p.code}">${p.name}</option>`;
+          });
+        });
+
+        provinceSelect.addEventListener("change", () => {
+          const selectedRegion = regionSelect.value;
+          const selectedProvince = provinceSelect.value;
+
+          citySelect.innerHTML = '<option value="">Select City</option>';
+          barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+
+          if (!selectedProvince) return;
+
+          const region = regions.find(r => r.code === selectedRegion);
+          const province = region.provinces.find(p => p.code === selectedProvince);
+
+          province.cities.forEach(c => {
+            citySelect.innerHTML += `<option value="${c.code}">${c.name}</option>`;
+          });
+        });
+
+        citySelect.addEventListener("change", () => {
+          const selectedRegion = regionSelect.value;
+          const selectedProvince = provinceSelect.value;
+          const selectedCity = citySelect.value;
+
+          barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+
+          if (!selectedCity) return;
+
+          const region = regions.find(r => r.code === selectedRegion);
+          const province = region.provinces.find(p => p.code === selectedProvince);
+          const city = province.cities.find(c => c.code === selectedCity);
+
+          city.barangays.forEach(b => {
+            barangaySelect.innerHTML += `<option value="${b}">${b}</option>`;
+          });
+        });
+      });
   </script>
 </body>
 </html>
