@@ -68,7 +68,8 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
-
+def create_alert(*args, **kwargs):
+    return None
 def get_summarized_log_data(device_id):
     print("testt")
     readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
@@ -204,14 +205,13 @@ def fetch_adafruit_iot_data():
             if getattr(gps_feed, "lat", None) is not None and getattr(gps_feed, "lon", None) is not None:
                 gps_lat = float(gps_feed.lat)
                 gps_long = float(gps_feed.lon)
-                print(f"[IOT FETCH] GPS Coordinates: {gps_lat}, {gps_long}")
+                
             else:
                 print("[IOT FETCH] GPS feed exists but lat/lon are None.")
         except Exception as e:
             print(f"[IOT FETCH] GPS fetch error: {e}")
 
-        if temperature is not None:
-            print(f"[IOT FETCH] Temperature: {temperature:.2f}°C, GPS=({gps_lat}, {gps_long})")
+       
 
         return temperature, gps_lat, gps_long
 
@@ -267,14 +267,14 @@ def fetch_latest_iot(contract_id):
 			print(f"no iot connected to {contract_id}.")
 			return {"temperature": None, "recorded_at": None}
 
-		latest = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
+		latest = IoTData.objects.filter(device=device).order_by('-created_at').first()
 		if not latest:
 			print(f"no iot data for {device.device_id}.")
 			return {"temperature": None, "recorded_at": None}
 
 		return {
 			"temperature": latest.temperature,
-			"recorded_at": latest.recorded_at,
+			 "recorded_at": latest.created_at,
 		}
 
 	except Exception as e:
@@ -287,7 +287,7 @@ def push_iot_to_supabase(temperature=None, battery_voltage=None, gps_lat=None, g
 		"battery_voltage": battery_voltage,
 		"gps_lat": gps_lat,
 		"gps_long": gps_long,
-		"recorded_at": datetime.utcnow().isoformat(),
+		"created_at": datetime.utcnow().isoformat(),   # IoT's real timestamp
 	}
 
 	try:
@@ -467,8 +467,17 @@ def _get_live_iot_data():
 
 
 def _get_current_temp(threshold_float):
-	current_temp_mock = IoTData.objects.latest('recorded_at').temperature
-	return f"{current_temp_mock:.1f}°C", current_temp_mock
+    try:
+        latest = IoTData.objects.latest('recorded_at')
+        if latest and latest.temperature is not None:
+            return f"{latest.temperature:.1f}°C", latest.temperature
+    except IoTData.DoesNotExist:
+        return "N/A", None
+    except Exception as e:
+        print(f"get temp failed: {e}")
+        return "N/A", None
+
+    return "N/A", None
 
 
 def dashboard_data(request):
@@ -498,7 +507,8 @@ def dashboard_data(request):
 	normal_records = iot_data.filter(temperature__range=(2, 8)).count()
 	success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
 
-	active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
+	#active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
+	active_alerts = 0
 	system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
 	status_color = "bg-success" if active_alerts == 0 else "bg-danger"
 
@@ -553,9 +563,12 @@ def overview_view(request):
 	success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
 
 	# --- ALERTS ---
-	alerts = Alert.objects.filter(device__contract__in=contracts)
-	active_alerts = alerts.filter(status="Active")
-	active_alert_count = active_alerts.count()
+	#alerts = Alert.objects.filter(device__contract__in=contracts)
+	alerts = []
+	#active_alerts = alerts.filter(status="Active")
+	active_alerts = []
+	#active_alert_count = active_alerts.count()
+	active_alert_count = 0
 
 	# Active sensors (linked to active contracts)
 	active_sensors = (
@@ -600,8 +613,7 @@ def active_view(request):
 			pk=request.user.pk
 		)
 		
-		# ADDED PRINT STATEMENT FOR DEBUGGING
-		print(f"DEBUG: Sellers found with role__iexact='seller': {sellers.count()}")
+	
 		
 	except Exception as e:
 		# This catches an error if the 'role' field is named something else.
@@ -637,8 +649,7 @@ def active_view(request):
 	  print(f"ERROR fetching sellers: {e}")
 	  sellers = []
 	
-	# Add this print statement back to verify the query result
-	print(f"Contracts Queryset Count: {contracts_queryset.count()}") 
+
 
 	# 3. Assemble Context Data (simplified for clarity)
 	active_contracts = []
@@ -664,7 +675,7 @@ def active_view(request):
 		})
 	
 	# 4. IoT Device Filter
-	ready_iot_devices = IoTDevice.objects.filter(status='Available')
+	ready_iot_devices = IoTDevice.objects.filter(status__iexact='Available')
 	
 	context = {
 		'contracts': active_contracts,
@@ -676,8 +687,7 @@ def active_view(request):
 		"iot_devices": ready_iot_devices,
 	}
 	
-	# Add this print statement back to check the final context
-	print(f"Final Context: {context['contracts'][:1]}") 
+
 	
 	return render(request, 'dashboard/active.html', context)
 
@@ -738,9 +748,7 @@ def activate_contract_view(request, contract_id):
 	iot_device.status = "Active"
 	iot_device.contract = contract_db
 	iot_device.save()
-	print(f"iot device #'{iot_device.device_name}' marked active")
-
-	print(f"shuntin contract no#{contract_id}.")
+	
 	messages.success(request, f"contract {contract_id} activated with '{iot_device.device_name}'.")
 	return activate_contract(request, contract_id)
 	
@@ -834,36 +842,43 @@ def ongoing_view(request):
 			temperature=temperature,
 			gps_lat=gps_lat,
 			gps_long=gps_long,
-			device_id=1
+			device_id=1,
+			
 		)
 	else:
 		print("no data from adafruit/iot")
 
 	ongoing_data = []
 	for contract in contracts:
-		device = contract.IoT_Assigned  
+		device = getattr(contract, 'IoT_Assigned', None)
 		gps_lat = gps_lon = None
 		current_temp = "N/A"
 
 		if device:
-			latest_data = IoTData.objects.filter(device=device).order_by('-recorded_at').first()
+			latest_data = IoTData.objects.filter(device=device).order_by('-created_at').first()
+		else:
+			latest_data = None	
 			if latest_data:
 				current_temp = latest_data.temperature if latest_data.temperature is not None else "N/A"
 				gps_lat = latest_data.gps_lat
 				gps_lon = latest_data.gps_long
-				print(f"Contract {contract.contract_id}: GPS=({gps_lat}, {gps_lon})")
-			else:
-				print(f"Contract {contract.contract_id}: No IoTData found for device {device.device_name}")
-		else:
-			print(f"Contract {contract.contract_id}: No IoT_Assigned linked")
-
+		address_record = getattr(contract, "address_record", None)
+		init_tx = None
+		if address_record and address_record.init_payment_add:
+			init_tx = address_record.init_payment_add
 		ongoing_data.append({
 			"contract_id": contract.contract_id,
 			"product_name": contract.product_name,
+			"quantity": getattr(contract, "quantity", 0),
+			"price": str(getattr(contract, "price", "0")),   # convert Decimal to str for templates if needed
 			"status": contract.status,
-			"max_temp": contract.max_temp,
+			"min_temp": getattr(contract, "min_temp", None),
+			"max_temp": getattr(contract, "max_temp", None),
+			"contract_address": contract.contract_address,
 			"buyer_address": contract.buyer_address,
 			"seller_address": contract.seller_address,
+			"buyer_name": contract.buyer.full_name if getattr(contract, "buyer", None) else "",
+			"seller_name": contract.seller.full_name if getattr(contract, "seller", None) else "",
 			"current_temp": current_temp,
 			"gps_lat": gps_lat,
 			"gps_long": gps_lon,
@@ -872,8 +887,8 @@ def ongoing_view(request):
 				if (gps_lat is not None and gps_lon is not None)
 				else "N/A"
 			),
+			"init_payment": init_tx or "Not available",
 		})
-
 	context = {
 		"ongoing_data": ongoing_data,
 		"role": user_role,
@@ -1024,18 +1039,18 @@ def alerts_view(request):
 		contracts = Contract.objects.all()
 
 	# Get devices linked to those contracts
-	devices = IoTDevice.objects.filter(contract__in=contracts)
-
+	#devices = IoTDevice.objects.filter(contract__in=contracts)
+	
 	# Get alerts only from those devices
-	alerts = Alert.objects.filter(device__in=devices).select_related('device').order_by('-triggered_at')
+	#alerts = Alert.objects.filter(device__in=devices).select_related('device').order_by('-triggered_at')
+	
+	#context = {
+	#	"alerts": alerts,
+	#	"user_role": user_role
+	#}
 
-	context = {
-		"alerts": alerts,
-		"user_role": user_role
-	}
-
-	return render(request, "dashboard/alerts.html", context)
-
+	#return render(request, "dashboard/alerts.html", context)
+	return render(request, "dashboard/alerts.html")
 def analytics_view(request):
 	return render(request, 'dashboard/analytics.html')
 

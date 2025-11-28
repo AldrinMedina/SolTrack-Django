@@ -25,16 +25,18 @@ class Contract(models.Model):
     end_date = models.DateTimeField(null=True, blank=True)  
     
     # Matches DB: VARCHAR(255). 42 is sufficient, but 255 is fine.
-    contract_address = models.CharField(max_length=42, default='0x') 
+    contract_address = models.CharField(max_length=42, default='NOT_DEPLOYED') 
     
     # NEW FIELD: Uses Django's JSONField, which maps to PostgreSQL's JSONB type
-    contract_abi = models.JSONField(default=dict) 
+    contract_abi = models.JSONField(default=dict)
 
     min_temp = models.FloatField(default=2) # Or another suitable default
     max_temp = models.FloatField(default=8) 
     start_coord = models.CharField(max_length=50, null=True, blank=True) # Seller's location upon activation
     end_coord = models.CharField(max_length=50, null=True, blank=True)   # Buyer's location upon creation
-
+    temperature_time = models.IntegerField(default=180)
+    location_time = models.IntegerField(default=180)
+    radius = models.FloatField(default=30)
     # Matches DB: VARCHAR(50). Default should match your DB if possible, but 'active' works for filtering.
     status = models.CharField(max_length=50,  choices=[
         ('Active', 'Active'),
@@ -54,7 +56,15 @@ class Contract(models.Model):
 
     def __str__(self):
         return f"{self.product_name} ({self.status})"
+class ContractAddresses(models.Model):
+    id = models.AutoField(primary_key=True)
+    contract = models.OneToOneField('Contract', on_delete=models.CASCADE, related_name='address_record')
+    contract_address = models.CharField(max_length=42)
+    init_payment_add = models.CharField(max_length=255, null=True, blank=True)   # store init tx hash(es)
+    final_payment_add = models.CharField(max_length=255, null=True, blank=True)  # store final payout tx hash
 
+    class Meta:
+        db_table = 'contract_addresses'
 class IoTDevice(models.Model):
     device_id = models.AutoField(primary_key=True)
     contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='devices', null=True, blank=True)
@@ -84,19 +94,16 @@ class IoTDataHistory(models.Model):
 
 class Alert(models.Model):
     alert_id = models.AutoField(primary_key=True)
-    device = models.ForeignKey('IoTDevice', on_delete=models.CASCADE, db_column='device_id')
-    alert_type = models.CharField(max_length=100)
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, db_column='contract_id')
+    alert_type = models.CharField(max_length=50)
     alert_message = models.TextField()
-    severity = models.CharField(max_length=50, default='Warning')
-    status = models.CharField(max_length=50, default='Active')
-    triggered_at = models.DateTimeField(auto_now_add=True)
+    severity = models.CharField(max_length=20)
+    status = models.CharField(max_length=20)
+    triggered_at = models.DateTimeField()
 
     class Meta:
         db_table = 'alerts'
-        managed = False  # important — this prevents Django from altering your real table
-
-    def __str__(self):
-        return f"{self.alert_type} - {self.status}"
+        managed = False
 
 class IoTData(models.Model):
     data_id = models.AutoField(primary_key=True)
@@ -111,7 +118,7 @@ class IoTData(models.Model):
     gps_lat = models.FloatField(null=True, blank=True)
     gps_long = models.FloatField(null=True, blank=True)
     recorded_at = models.DateTimeField(auto_now_add=True)
-    data_created_at = models.DateTimeField(unique=True)
+    created_at = models.DateTimeField()
 
     class Meta:
         db_table = 'iot_data'

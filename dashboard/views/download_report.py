@@ -11,7 +11,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 from math import radians, cos, sin, asin, sqrt
-
+from django.conf import settings
+import os
 from dashboard.models import Contract, IoTData, IoTDataHistory
 from accounts.models import CustomUser
 
@@ -91,6 +92,9 @@ def gps_summary_from_readings(readings):
 def download_contract_report(request, contract_id):
     # --- Retrieve Contract + Parties Info ---
     contract = get_object_or_404(Contract, pk=contract_id)
+    address_record = getattr(contract, "address_record", None)
+    init_payment_add = getattr(address_record, "init_payment_add", None) if address_record else None
+    final_payment_add = getattr(address_record, "final_payment_add", None) if address_record else None
 
     buyer_name = getattr(contract, "buyer_name", None) or (contract.buyer.full_name if getattr(contract, "buyer", None) else None) or "N/A"
     buyer_email = getattr(contract, "buyer_email", None) or (contract.buyer.email if getattr(contract, "buyer", None) else None) or "N/A"
@@ -136,17 +140,18 @@ def download_contract_report(request, contract_id):
 
     # --- Header (logo) ---
     try:
-        logo_path = static("img/logo_trans.png")  # your static file path
-        logo = Image(logo_path, width=1.1*inch, height=1.1*inch)
-        header_table = Table([[logo, Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)]],
-                             colWidths=[1.4*inch, 4.0*inch])
-        header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ]))
-        content.append(header_table)
-    except Exception:
-        content.append(Paragraph("<b>SOLTRACK</b>", title_style))
+     logo_path = os.path.join(settings.BASE_DIR, "static", "img", "logo_trans.png")
+     logo = Image(logo_path, width=1.1*inch, height=1.1*inch)
+     header_table = Table([[logo, Paragraph("<b>SOLTRACK</b><br/><font size=9>Smart Logistics & Escrow Platform</font>", normal_text)]],
+      colWidths=[1.4*inch, 4.0*inch])
+     header_table.setStyle(TableStyle([
+      ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+      ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+     ]))
+     content.append(header_table)
+    except Exception as e:
+     print("⚠ PDF LOGO LOAD ERROR:", e)
+     content.append(Paragraph("<b>SOLTRACK</b>", title_style))
     content.append(Spacer(1, 10))
 
     # --- Title ---
@@ -204,6 +209,26 @@ def download_contract_report(request, contract_id):
     ]))
     content.append(parties_table)
     content.append(Spacer(1, 12))
+    content.append(Paragraph("Blockchain Payment Records", section_header))
+    def shorten(tx):
+     return f"{tx[:12]}…{tx[-8:]}" if tx and len(tx) > 26 else tx
+    init_display = shorten(init_payment_add) if init_payment_add else "Not available"
+    final_display = shorten(final_payment_add) if final_payment_add else "Not available"
+    payment_data = [
+     ["Initial Payment TX", init_display],
+     ["Final Payment TX", final_display],
+    ]
+
+    payment_table = Table(payment_data, colWidths=[2.7*inch, 4*inch])
+    payment_table.setStyle(TableStyle([
+     ('BACKGROUND', (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
+     ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+     ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    content.append(payment_table)
+    content.append(Spacer(1, 12))
+
 
     # --- IoT Summary (aggregate) ---
     content.append(Paragraph("Temperature Monitoring Summary", section_header))
@@ -226,60 +251,9 @@ def download_contract_report(request, contract_id):
     content.append(iot_table)
     content.append(Spacer(1, 12))
 
-    # --- Temperature Timeline (compact ranges) ---
-    content.append(Paragraph("Temperature Timeline", section_header))
-    timeline = build_temperature_timeline(live_readings) if live_readings else []
-    if not timeline and use_hist:
-        # fallback: summarize history records if you have aggregated history entries
-        history_rows = IoTDataHistory.objects.filter(contract=contract).order_by('created_at')[:50]
-        # create a very simple timeline from history averages if available
-        for h in history_rows:
-            if h.avg_temp is None or getattr(h, 'created_at', None) is None:
-                continue
-            content.append(Paragraph(f"{h.created_at.strftime('%Y-%m-%d %H:%M:%S')}: {h.avg_temp:.1f}°C", normal_text))
-    else:
-        # Render compact timeline table
-        if not timeline:
-            content.append(Paragraph("<i>No recent temperature data available.</i>", normal_text))
-        else:
-            tl_rows = []
-            for seg in timeline:
-                s = seg["start"].strftime("%H:%M:%S")
-                e = seg["end"].strftime("%H:%M:%S")
-                temp_disp = f"{seg['temp']:.1f}°C"
-                tl_rows.append([f"{s} → {e}", temp_disp])
-            tl_table = Table(tl_rows, colWidths=[3.5*inch, 3.0*inch])
-            tl_table.setStyle(TableStyle([
-                ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor("#e6eef8")),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('PADDING', (0,0), (-1,-1), 6),
-            ]))
-            content.append(tl_table)
-    content.append(Spacer(1, 12))
+   
 
-    # --- GPS summary ---
-    content.append(Paragraph("GPS Summary", section_header))
-    gps_summary = gps_summary_from_readings(live_readings) if live_readings else {"start": None, "end": None, "distance_km": None, "points": 0}
-    if gps_summary["points"] == 0:
-        content.append(Paragraph("<i>No GPS points available.</i>", normal_text))
-    else:
-        start_coord = gps_summary["start"]
-        end_coord = gps_summary["end"]
-        distance = gps_summary["distance_km"]
-        gps_rows = [
-            ['Points recorded', str(gps_summary["points"])],
-            ['Start (lat, long)', f"{start_coord[0]:.5f}, {start_coord[1]:.5f}"],
-            ['End (lat, long)', f"{end_coord[0]:.5f}, {end_coord[1]:.5f}"],
-            ['Distance travelled (km)', f"{distance:.3f} km" if distance is not None else "N/A"]
-        ]
-        gps_table = Table(gps_rows, colWidths=[2.7*inch, 4*inch])
-        gps_table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor("#e6eef8")),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]))
-        content.append(gps_table)
-    content.append(Spacer(1, 20))
+  
 
     # --- Footer ---
     footer_text = f"""

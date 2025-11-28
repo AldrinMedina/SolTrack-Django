@@ -13,12 +13,12 @@ def poll_contract_updates(request):
     for c in contracts:
         if c.status == "Refunded":
             events.append({"id": c.contract_id, "event": "refunded"})
-            c.status = "RefundedNotified"
+            c.status = "Refunded"
             c.save(update_fields=["status"])
 
         elif c.status == "Completed":
             events.append({"id": c.contract_id, "event": "completed"})
-            c.status = "CompletedNotified"
+            c.status = "Completed"
             c.save(update_fields=["status"])
 
     return JsonResponse({"events": events})

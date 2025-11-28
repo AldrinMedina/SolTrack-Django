@@ -9,6 +9,9 @@ from .contract_functions import (
 from .download_report import (
 	download_contract_report
 )
+from .contract_watchers import (
+	start_watcher
+)
 from .notify_functions import (
 	poll_contract_updates
 )
