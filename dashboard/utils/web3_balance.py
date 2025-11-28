@@ -1,4 +1,6 @@
 from web3 import Web3
+import os
+
 
 # ⚠ Ganache RPC (current environment)
 GANACHE_RPC = "http://127.0.0.1:7545"
@@ -8,7 +10,10 @@ GANACHE_RPC = "http://127.0.0.1:7545"
 
 #w3 = Web3(Web3.HTTPProvider(SEPOLIA_RPC ))
 
-w3 = Web3(Web3.HTTPProvider(GANACHE_RPC))
+# w3 = Web3(Web3.HTTPProvider(GANACHE_RPC))
+
+SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL", "https://sepolia.infura.io/v3/0a916ab0592e408d9c9bee7ff50a2fd6")
+w3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 
 def get_eth_balance(address: str) -> float:
     """Returns ETH balance for a wallet address in float ETH."""
