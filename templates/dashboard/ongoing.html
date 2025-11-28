@@ -84,47 +84,47 @@ data-init-payment="{{ shipment.init_payment }}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="complete">
                 <button type="submit" class="btn btn-sm btn-success finalize-btn me-1">
-                    Complete
+                    <i class="bi bi-clipboard2-check"></i>
                 </button>
             </form>
             <form method="POST" action="{% url 'process_contract_action' contract_id=shipment.contract_id %}" style="display: inline;">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="refund">
                 <button type="submit" class="btn btn-sm btn-warning finalize-btn">
-                    Refund
+                    <i class="bi bi-arrow-return-left"></i>
+
                 </button>
             </form>
         </div>
         
         <div>
             <button 
-    type="button"
-    class="btn btn-sm btn-primary"
-    data-bs-toggle="modal" 
-    data-bs-target="#contractDetailsModal"
-    data-contract-id="{{ shipment.contract_id }}"
-    data-product-name="{{ shipment.product_name }}"
-    data-quantity="{{ shipment.quantity }}"
-    data-price="{{ shipment.price }}"
-    data-min-temp="{{ shipment.min_temp }}"
-    data-max-temp="{{ shipment.max_temp }}"
-    data-contract-address="{{ shipment.contract_address }}"
-    data-buyer-name="{{ shipment.buyer.full_name }}"
-    data-buyer-address="{{ shipment.buyer_address }}"
-    data-seller-name="{{ shipment.seller.full_name }}"
-    data-seller-address="{{ shipment.seller_address }}"
-
-data-init-payment="{{ shipment.init_payment }}">
-    Contract Details
-</button>
-<button
-  type="button"
-  class="btn btn-outline-primary btn-sm btn-view-log"
-  data-contract-id="{{ shipment.contract_id }}"
-  data-bs-toggle="modal"
-  data-bs-target="#logModal">
-  View Log
-</button>
+                type="button"
+                class="btn btn-sm btn-primary me-1"
+                data-bs-toggle="modal" 
+                data-bs-target="#contractDetailsModal"
+                data-contract-id="{{ shipment.contract_id }}"
+                data-product-name="{{ shipment.product_name }}"
+                data-quantity="{{ shipment.quantity }}"
+                data-price="{{ shipment.price }}"
+                data-min-temp="{{ shipment.min_temp }}"
+                data-max-temp="{{ shipment.max_temp }}"
+                data-contract-address="{{ shipment.contract_address }}"
+                data-buyer-name="{{ shipment.buyer.full_name }}"
+                data-buyer-address="{{ shipment.buyer_address }}"
+                data-seller-name="{{ shipment.seller.full_name }}"
+                data-seller-address="{{ shipment.seller_address }}"
+                data-init-payment="{{ shipment.init_payment }}">
+                <i class="bi bi-file-earmark-text"></i>
+            </button>
+            <button
+                type="button"
+                class="btn btn-outline-primary btn-sm btn-view-log"
+                data-contract-id="{{ shipment.contract_id }}"
+                data-bs-toggle="modal"
+                data-bs-target="#logModal">
+                <i class="bi bi-journal-text"></i>
+            </button>
         </div>
     </div>
 </td>

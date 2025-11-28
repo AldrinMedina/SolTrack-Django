@@ -100,14 +100,14 @@
 
                            
                             <td class="px-4 py-3 text-end">
-								<div class="btn-group" role="group">
+								<div class="" role="group">
                                     <button 
                                         type="button" 
                                         class="btn btn-sm btn-info text-white view-details-btn"
                                         data-bs-toggle="modal" 
                                         data-bs-target="#contractDetailsModal"
                                     >
-                                        Details
+                                        <i class="bi bi-info-circle"></i>
                                     </button>
                                {% if contract_data.contract.status == 'Pending' %}
                                         {% if role == 'seller' %}
@@ -121,19 +121,19 @@
                                             data-quantity="{{ contract_data.contract.quantity }}"
                                             data-action-url="{% url 'activate_contract_view' contract_data.contract.pk %}"
                                         >
-                                            Activate
+                                            <i class="bi bi-check2-circle"></i>
                                         </button>
                                         <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
                                             {% csrf_token %}
                                             <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to deny (delete) this contract? This action is irreversible.');">
-                                                Deny
+                                                <i class="bi bi-slash-circle"></i>
                                             </button>
                                         </form>
                                         {% elif role == 'buyer' %}
                                         <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
                                             {% csrf_token %}
                                             <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to cancel this contract? This action is irreversible.');">
-                                                Cancel
+                                                <i class="bi bi-slash-circle"></i>
                                             </button>
                                         </form>
                                         {% endif %}

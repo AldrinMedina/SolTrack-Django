@@ -494,7 +494,7 @@ def dashboard_data(request):
 	total_contracts = contracts.count()
 	active_contracts = contracts.filter(status__in=["Active", "Ongoing", "In Transit"]).count()
 	ongoing_contracts = contracts.filter(status__in=["In Transit", "Ongoing"]).count()
-	completed_contracts = contracts.filter(status__in=["Completed", "Delivered"]).count()
+	completed_contracts = contracts.filter(status__in=["Completed", "Delivered", "Refunded"]).count()
 
 	devices = IoTDevice.objects.filter(contract__in=contracts)
 	iot_data = IoTData.objects.filter(device__in=devices)
@@ -505,8 +505,7 @@ def dashboard_data(request):
 	normal_records = iot_data.filter(temperature__range=(2, 8)).count()
 	success_rate = round((normal_records / total_records) * 100, 1) if total_records > 0 else 0
 
-	#active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
-	active_alerts = 0
+	active_alerts = Alert.objects.filter(device__in=devices, status="Active").count()
 	system_status = "All sensors online" if active_alerts == 0 else "Issues detected"
 	status_color = "bg-success" if active_alerts == 0 else "bg-danger"
 
@@ -979,16 +978,16 @@ def completed_view(request):
             contracts_queryset = Contract.objects.filter(
                 buyer_address=m_address,
                 status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+            ).order_by('-contract_id')
         elif user_role == "seller":
             contracts_queryset = Contract.objects.filter(
                 seller_address=m_address,
                 status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+            ).order_by('-contract_id')
         else:
             contracts_queryset = Contract.objects.filter(
                 status__in=['Completed', 'Refunded']
-            ).order_by('-end_date', '-start_date')
+            ).order_by('-contract_id')
     except Exception as e:
         print(f"[ERROR] Contract query failed: {e}")
         contracts_queryset = []
@@ -1040,12 +1039,12 @@ def alerts_view(request):
     else:
         # ===== CONTRACTS FOR BUYER =====
         buyer_contracts = Contract.objects.filter(
-            buyer_id=user.id
+            buyer_id=user.user_id
         ).values_list('contract_id', flat=True)
 
         # ===== CONTRACTS FOR SELLER =====
         seller_contracts = Contract.objects.filter(
-            seller_id=user.id
+            seller_id=user.user_id
         ).values_list('contract_id', flat=True)
 
         # ===== DEVICES UNDER THOSE CONTRACTS =====
@@ -1091,6 +1090,8 @@ def alerts_view(request):
         else:
             # Unknown role — only show alerts common to all
             alerts = common_alerts.distinct()
+
+    alerts = alerts.filter(status='Active')
 
     # ===== ORDERING =====
     alerts = alerts.order_by('-triggered_at')
