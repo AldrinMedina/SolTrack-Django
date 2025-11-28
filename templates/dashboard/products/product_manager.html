@@ -18,6 +18,7 @@
                 <th>Quantity</th>
                 <th>Min Temperature</th>
                 <th>Max Temperature</th>
+                <th>Temp Time Range</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
@@ -33,6 +34,7 @@
                 <td>{{ product.quantity_available }}</td>
                 <td>{{ product.min_temp }}°C</td>
                 <td>{{ product.max_temp }}°C</td>
+                <td>{{ product.temp_time_range }} mins</td>
                 <td>{{ product.created_at|date:"M d, Y" }}</td>
                 
                 <td>

@@ -51,9 +51,23 @@ data-init-payment="{{ shipment.init_payment }}">
         
         <td class="px-4 py-3">{{ shipment.product_name }}</td>
         
-        <td class="px-4 py-3">
-            <span id="live-temp-{{ shipment.contract_id }}" class="fw-medium text-loading">Loading...</span>
-        </td>
+    <td class="px-4 py-3">
+    {% if shipment.offline %}
+    <span class="badge bg-danger">IoT Offline</span><br>
+    <small class="text-muted">
+        Last update {{ shipment.last_update_dt|timesince }} ago <br>
+        <span class="fst-italic">{{ shipment.last_update_str }}</span>
+    </small>
+{% else %}
+    <span id="live-temp-{{ shipment.contract_id }}" class="fw-medium text-loading">Loading...</span><br>
+    {% if shipment.last_update_dt %}
+        <small class="text-muted">
+            Updated {{ shipment.last_update_dt|timesince }} ago <br>
+            <span class="fst-italic">{{ shipment.last_update_str }}</span>
+        </small>
+    {% endif %}
+{% endif %}
+</td>
         <td class="px-4 py-3">
     <span class="fw-medium text-dark">
         {{ shipment.current_location }}
