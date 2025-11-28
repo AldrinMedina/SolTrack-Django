@@ -31,8 +31,8 @@ load_dotenv()
 install_solc('0.5.16')
 set_solc_version('0.5.16')
 
-GANACHE_URL = os.getenv("GANACHE_URL", "http://127.0.0.1:7545")
-web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL", "https://sepolia.infura.io/v3/0a916ab0592e408d9c9bee7ff50a2fd6")
+web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
 FIXED_ESCROW_FEE_ETH = 0.005
 solidity_code = '''
