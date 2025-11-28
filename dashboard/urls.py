@@ -15,7 +15,11 @@ urlpatterns = [
     
     path('completed/', views.completed_view, name='completed'),
     path('completed/<int:contract_id>/', views.download_contract_report, name='download_contract_report'),
+    
     path('alerts/', views.alerts_view, name='alerts'),
+    path('alerts/clear_all/', views.clear_all_alerts, name='clear_all_alerts'),
+    path('alerts/mark_read/<int:alert_id>/', views.mark_alert_read, name='mark_alert_read'),
+
     path('analytics/', views.analytics_view, name='analytics'),
 
 

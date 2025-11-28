@@ -1012,29 +1012,53 @@ def completed_view(request):
 
 @login_required(login_url='login')
 def alerts_view(request):
-	user = request.user
-	user_role = request.session.get("user_role", "").lower()
-	user_id = request.session.get("user_id")
-	# Filter contracts based on user role
-	if user_role == "buyer":
-		contracts = Contract.objects.filter(buyer_id=user_id)
-	elif user_role == "seller":
-		contracts = Contract.objects.filter(seller_id=user_id)
-	else:  # Admin sees all
-		contracts = Contract.objects.all()
+    user = request.user
 
-	# Get devices linked to those contracts
-	devices = IoTDevice.objects.filter(contract__in=contracts)
+    # ===== CHECK USER ROLE =====
+    user_role = user.role  # Assuming you have a 'role' field in your User model
 
-	# Get alerts only from those devices
-	alerts = Alert.objects.filter(device__in=devices).select_related('device').order_by('-triggered_at')
+    # ===== ADMIN: SEE ALL ALERTS =====
+    if user_role == "Admin":
+        alerts = Alert.objects.filter(status='Active')
 
-	context = {
-		"alerts": alerts,
-		"user_role": user_role
-	}
+    else:
+        # ===== BUYER: ALERTS WHERE HE IS THE BUYER =====
+        buyer_contracts = Contract.objects.filter(
+            buyer_id=user.id
+        ).values_list('contract_id', flat=True)
 
-	return render(request, "dashboard/alerts.html", context)
+        # ===== SELLER: ALERTS WHERE HE IS THE SELLER =====
+        seller_contracts = Contract.objects.filter(
+            seller_id=user.id
+        ).values_list('contract_id', flat=True)
+
+        # ===== CONTRACT-BASED ALERTS =====
+        alerts = Alert.objects.filter(
+            Q(contract_id__in=buyer_contracts) |
+            Q(contract_id__in=seller_contracts)
+        )
+
+        # ===== If alerts have IoT devices =====
+        # This will automatically include alerts triggered by IoT devices under the user's contracts
+        device_ids = IoTDevice.objects.filter(
+            contract_id__in=list(buyer_contracts) + list(seller_contracts)
+        ).values_list('device_id', flat=True)
+
+        alerts = alerts | Alert.objects.filter(
+            iot_device_id__in=device_ids
+        )
+
+        # Remove duplicates
+        alerts = alerts.distinct()
+
+    # Ordering and optional filters
+    alerts = alerts.order_by('-triggered_at')
+
+    category = request.GET.get('category')
+    if category:
+        alerts = alerts.filter(category=category)
+
+    return render(request, 'dashboard/alerts.html', {'alerts': alerts})
 
 def analytics_view(request):
 	return render(request, 'dashboard/analytics.html')
