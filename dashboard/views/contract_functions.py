@@ -77,20 +77,29 @@ def haversine(lat1, lon1, lat2, lon2):
 	return R * c
 	
 	
-	
 def get_deployer_key_and_address():
-	try:
-		deployer_user = CustomUser.objects.all()[9]
-		deployer_user.private_key = os.getenv("DEPLOYER_PRIVATE_KEY")
-		deployer_user.m_address = os.getenv("DEPLOYER_ADDRESS")
-		if not deployer_user.m_address or not deployer_user.private_key:
-			raise ValueError("10th user is missing 'm_address' or 'private_key' in the database.")			
-		return deployer_user.m_address, deployer_user.private_key
-	
-	except IndexError:
-		raise IndexError("Could not find the 10th user in CustomUser table. Ensure 10 accounts exist.")
-	except Exception as e:
-		raise Exception(f"Failed to fetch deployer credentials: {e}")
+    try:
+        # Prefer environment variables (explicit) and fall back to DB user if present
+        env_addr = os.getenv("DEPLOYER_ADDRESS")
+        env_key = os.getenv("DEPLOYER_PRIVATE_KEY")
+
+        if env_addr and env_key:
+            print(f"[DEBUG] Using DEPLOYER from ENV: {env_addr}")
+            return env_addr, env_key
+
+        # fallback to 10th user (legacy behavior) but validate
+        deployer_user = CustomUser.objects.all()[9]
+        # Keep DB values only if env not provided
+        if not getattr(deployer_user, "m_address", None) or not getattr(deployer_user, "private_key", None):
+            raise ValueError("Deployer credentials missing in DB and DEPLOYER_ADDRESS/DEPLOYER_PRIVATE_KEY env vars not set.")
+        print(f"[DEBUG] Using DEPLOYER from DB: {deployer_user.m_address}")
+        return deployer_user.m_address, deployer_user.private_key
+
+    except IndexError:
+        raise IndexError("Could not find the 10th user in CustomUser table. Ensure 10 accounts exist or set DEPLOYER_ADDRESS/DEPLOYER_PRIVATE_KEY env vars.")
+    except Exception as e:
+        # re-raise with context so caller can log it
+        raise Exception(f"Failed to fetch deployer credentials: {e}")
 
 
 def send_eth_transaction(from_address, private_key, to_address, amount_eth):
@@ -99,32 +108,54 @@ def send_eth_transaction(from_address, private_key, to_address, amount_eth):
     Returns (tx_hash_hex, receipt)
     Raises on failure.
     """
+    try:
+        if not web3.is_connected():
+            raise ConnectionError("Web3 is not connected.")
 
-    if not web3.is_connected():
-        raise ConnectionError("Web3 is not connected.")
+        if not private_key:
+            raise ValueError(f"Missing private key for {from_address}")
 
-    nonce = web3.eth.get_transaction_count(from_address)
-    base_fee = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
+        # show balances and nonce for quick debugging
+        try:
+            bal = web3.eth.get_balance(from_address)
+            print(f"[DEBUG send] From {from_address} balance: {web3.from_wei(bal, 'ether')} ETH")
+        except Exception as ebal:
+            print(f"[DEBUG send] Could not read balance: {ebal}")
 
-    tx = {
-        'chainId': web3.eth.chain_id,
-        'from': from_address,
-        'to': to_address,
-        'nonce': nonce,
-        'value': web3.to_wei(amount_eth, 'ether'),
-        'maxFeePerGas': int(base_fee * 2),
-        'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-        'gas': 21000
-    }
+        nonce = web3.eth.get_transaction_count(from_address)
+        print(f"[DEBUG send] Nonce for {from_address}: {nonce}")
 
-    signed = web3.eth.account.sign_transaction(tx, private_key=private_key)
-    tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
-    receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        base_fee = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
 
-    if receipt.status != 1:
-        raise Exception(f"Transaction failed. TX={tx_hash.hex()}. Status={receipt.status}")
+        tx = {
+            'chainId': web3.eth.chain_id,
+            'from': from_address,
+            'to': to_address,
+            'nonce': nonce,
+            'value': web3.to_wei(amount_eth, 'ether'),
+            "maxFeePerGas": base_fee + web3.to_wei(2, "gwei"),
+			"maxPriorityFeePerGas": web3.to_wei(1, "gwei"),
+            'gas': 21000
+        }
 
-    return tx_hash.hex(), receipt
+        # ensure private key format
+        if not str(private_key).startswith("0x"):
+            private_key = "0x" + str(private_key)
+
+        signed = web3.eth.account.sign_transaction(tx, private_key=private_key)
+        tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+
+        if receipt is None or receipt.status != 1:
+            raise Exception(f"Transaction failed. TX={tx_hash.hex()}. Status={(receipt.status if receipt else 'no receipt')}")
+
+        print(f"[DEBUG send] TX {tx_hash.hex()} succeeded in block {receipt.blockNumber}")
+        return tx_hash.hex(), receipt
+
+    except Exception as e:
+        traceback.print_exc()
+        raise
+
     
 def deny_contract(request, contract_id):
     if request.method != "POST":
@@ -161,43 +192,75 @@ def deny_contract(request, contract_id):
     return redirect("active")
 
 def deploy_contract_on_chain(contract_obj):
-    DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address()
+    try:
+        DEPLOYER_ADDRESS, DEPLOYER_PRIVATE_KEY = get_deployer_key_and_address()
 
-    if not web3.is_connected():
-        raise RuntimeError("Web3 is not connected")
+        if not web3.is_connected():
+            raise RuntimeError("Web3 is not connected")
 
-    compiled = compile_source(solidity_code)
-    _, contract_interface = compiled.popitem()
+        print(f"[DEBUG deploy] DEPLOYER_ADDRESS={DEPLOYER_ADDRESS}")
+        if not DEPLOYER_PRIVATE_KEY or not DEPLOYER_ADDRESS:
+            raise ValueError("Missing deployer private key or address. Check env or DB.")
 
-    abi = contract_interface["abi"]
-    bytecode = contract_interface["bin"]
+        # show balances for debugging
+        try:
+            bal = web3.eth.get_balance(DEPLOYER_ADDRESS)
+            print(f"[DEBUG deploy] Deployer balance: {web3.from_wei(bal, 'ether')} ETH")
+        except Exception as ebal:
+            print(f"[DEBUG deploy] Could not fetch deployer balance: {ebal}")
 
-    ContractInstance = web3.eth.contract(abi=abi, bytecode=bytecode)
+        compiled = compile_source(solidity_code)
+        _, contract_interface = compiled.popitem()
 
-    nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
-    base_fee = web3.eth.fee_history(1, "latest", [10]).baseFeePerGas[-1]
+        abi = contract_interface["abi"]
+        bytecode = contract_interface["bin"]
 
-    tx = ContractInstance.constructor().build_transaction({
-        "chainId": web3.eth.chain_id,
-        "from": DEPLOYER_ADDRESS,
-        "nonce": nonce,
-        "maxFeePerGas": int(base_fee * 2),
-        "maxPriorityFeePerGas": web3.to_wei(2, "gwei"),
-        "gas": 4_000_000,
-    })
+        ContractInstance = web3.eth.contract(abi=abi, bytecode=bytecode)
 
-    signed = web3.eth.account.sign_transaction(tx, DEPLOYER_PRIVATE_KEY)
-    tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
+        nonce = web3.eth.get_transaction_count(DEPLOYER_ADDRESS)
+        print(f"[DEBUG deploy] Nonce for deployer: {nonce}")
 
-    receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        latest = web3.eth.fee_history(1, "latest", [25])
+        base_fee = latest['baseFeePerGas'][-1]
 
-    if receipt.status != 1:
-        raise RuntimeError("Contract deployment failed")
+        priority = web3.to_wei(1, "gwei")  # safe default
+        max_fee  = base_fee + priority * 2  # always > priority
 
-    print("DEBUG DEPLOYED ADDRESS =", receipt.contractAddress)
-    print("DEBUG ABI LENGTH =", len(abi))
+        tx = ContractInstance.constructor().build_transaction({
+	        "chainId": web3.eth.chain_id,
+	        "from": DEPLOYER_ADDRESS,
+	        "nonce": nonce,
+	        "maxFeePerGas": max_fee,
+	        "maxPriorityFeePerGas": priority,
+	        "gas": 4_000_000,
+        })
 
-    return receipt.contractAddress, abi
+
+        # ensure private key begins with 0x
+        if not str(DEPLOYER_PRIVATE_KEY).startswith("0x"):
+            DEPLOYER_PRIVATE_KEY = "0x" + str(DEPLOYER_PRIVATE_KEY)
+
+        signed = web3.eth.account.sign_transaction(tx, DEPLOYER_PRIVATE_KEY)
+        print("[DEBUG deploy] Transaction signed, sending...")
+        tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
+        print(f"[DEBUG deploy] Tx submitted: {tx_hash.hex()} - waiting for receipt...")
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+
+        if receipt is None:
+            raise RuntimeError("No receipt returned for deployment tx.")
+        if receipt.status != 1:
+            raise RuntimeError(f"Contract deployment failed. Receipt status: {receipt.status}")
+
+        print("DEBUG DEPLOYED ADDRESS =", receipt.contractAddress)
+        print("DEBUG ABI LENGTH =", len(abi))
+
+        return receipt.contractAddress, abi
+
+    except Exception as e:
+        # print traceback for logs, then re-raise so callers can handle
+        traceback.print_exc()
+        raise
+
 
 def activate_contract(request, contract_id):
     print("⚠️ activate_contract VIEW HIT")
@@ -638,18 +701,23 @@ def process_contract_action(request, contract_id):
 			raise ValueError(f"Invalid contract action received: {action}")
 		
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {amount_eth} ETH)") # <-- Now prints the actual price
-		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
-		max_fee = int(estimated_fees * 2)
-		
+		# Fetch dynamic base fee
+		latest = web3.eth.fee_history(1, 'latest', [25])
+		base_fee = latest['baseFeePerGas'][-1]
+
+		priority_fee = web3.to_wei(1, "gwei")  # safe, low, Sepolia compatible
+		max_fee = base_fee + (priority_fee * 2)  # ensure > priority
+
 		tx_data = contract_func(recipient_address).build_transaction({
 			'chainId': web3.eth.chain_id,
 			'from': DEPLOYER_ADDRESS,
 			'nonce': nonce,
 			'value': AMOUNT_TO_SEND,
-			'maxFeePerGas': max_fee,
-			'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-			'gas':  100000
+			"maxFeePerGas": max_fee,
+			"maxPriorityFeePerGas": priority_fee,
+			"gas": 100000
 		})
+
 		
 		signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=DEPLOYER_PRIVATE_KEY)
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] -> Transaction signed successfully.")
@@ -797,18 +865,23 @@ def execute_onchain_action(contract_db, action):
 			print(f"[AUTO] Unknown action: {action}")
 			return False
 
-		estimated_fees = web3.eth.fee_history(1, 'latest', [10]).baseFeePerGas[-1]
-		max_fee = int(estimated_fees * 2)
+		# Fetch dynamic base fee
+		latest = web3.eth.fee_history(1, 'latest', [25])
+		base_fee = latest['baseFeePerGas'][-1]
+
+		priority_fee = web3.to_wei(1, "gwei")  # safe, low, Sepolia compatible
+		max_fee = base_fee + (priority_fee * 2)  # ensure > priority
 
 		tx_data = contract_func(recipient_address).build_transaction({
 			'chainId': web3.eth.chain_id,
 			'from': DEPLOYER_ADDRESS,
 			'nonce': nonce,
 			'value': AMOUNT_TO_SEND,
-			'maxFeePerGas': max_fee,
-			'maxPriorityFeePerGas': web3.to_wei(2, 'gwei'),
-			'gas': 100000
+			"maxFeePerGas": max_fee,
+			"maxPriorityFeePerGas": priority_fee,
+			"gas": 100000
 		})
+
 
 		signed_txn = web3.eth.account.sign_transaction(tx_data, private_key=DEPLOYER_PRIVATE_KEY)
 		tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
