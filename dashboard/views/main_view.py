@@ -68,8 +68,6 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
-def create_alert(*args, **kwargs):
-    return None
 def get_summarized_log_data(device_id):
     print("testt")
     readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')

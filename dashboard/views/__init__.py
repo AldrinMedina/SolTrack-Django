@@ -43,5 +43,4 @@ from .main_view import (
 from .alerts_controller import (
 	clear_all_alerts,
 	mark_alert_read,
-	create_alert,
 )
