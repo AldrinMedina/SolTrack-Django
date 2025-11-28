@@ -44,59 +44,103 @@
                         <tr>
                             <th class="px-4 py-3">Status</th>
                             <th class="px-4 py-3">Product Name</th>
-                            <th class="px-4 py-3">Buyer / Address</th>
-                            <th class="px-4 py-3">Seller / Address</th>
+                            
+                            <th class="px-4 py-3" style="min-width: 180px;">{% if role == 'buyer' %}Seller / Address{% else %}Buyer / Address{% endif %}</th>
                             <th class="px-4 py-3">Contract Address</th>
-                            <th class="px-4 py-3">Price (ETH)</th>
+                            <th class="px-4 py-3">Quantity</th> <th class="px-4 py-3">Price (ETH)</th>
                             <th class="px-4 py-3 text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for contract_data in contracts %}
-                        <tr>
+                        <tr 
+                            data-contract-id="{{ contract_data.contract.pk }}"
+                            data-product-name="{{ contract_data.contract.product_name }}"
+                            data-quantity="{{ contract_data.contract.quantity }}"
+                            data-price="{{ contract_data.contract.price }}"
+                            data-min-temp="{{ contract_data.contract.min_temp }}"
+                            data-max-temp="{{ contract_data.contract.max_temp }}"
+                            data-contract-address="{{ contract_data.contract.contract_address }}"
+                            data-buyer-name="{{ contract_data.buyer_name }}"
+                            data-seller-name="{{ contract_data.seller_name }}"
+                            data-buyer-address="{{ contract_data.contract.buyer_address }}"
+                            data-seller-address="{{ contract_data.contract.seller_address }}"
+                                data-init-payment="{{ contract_data.contract.address_record.init_payment_add|default:'Not available' }}"
+                        >
                             <td class="px-4 py-2">
                                 <span class="badge bg-{{ contract_data.status_class }} text-light">{{ contract_data.status }}</span>
                             </td>
                             <td class="px-4 py-2">{{ contract_data.contract.product_name }}</td>
                             
-                            <td class="px-4 py-2 text-truncate" style="max-width: 150px;" 
-    title="{{ contract_data.buyer_name }}" data-bs-toggle="tooltip">
-    {{ contract_data.buyer_name|truncatechars:15 }}
-</td>
-                            <td class="px-4 py-2 text-truncate" style="max-width: 150px;" 
-    title="{{ contract_data.seller_name }}" data-bs-toggle="tooltip">
-    {{ contract_data.seller_name|truncatechars:15 }}
-</td>
-
-                          <td class="px-4 py-2 text-truncate" style="max-width: 150px;">
-    <a href="#" title="{{ contract_data.contract.contract_address }}" data-bs-toggle="tooltip">{{ contract_data.contract.contract_address|truncatechars:10 }}</a>
-</td>
-                            <td class="px-4 py-2">{{ contract_data.contract.quantity }}</td>
-                            <td class="px-4 py-2">{{ contract_data.contract.price }}</td>
-                      <td class="px-4 py-3 text-end">
-    {% if role == 'seller' and contract_data.contract.status == 'Pending' %}
-    <button 
-        type="button" 
-        class="btn btn-sm btn-success activate-contract-btn"
-        data-bs-toggle="modal" 
-        data-bs-target="#activateContractModal"
-        
-        data-contract-id="{{ contract_data.contract.pk }}"
-        data-product-name="{{ contract_data.contract.product_name }}"
-        data-quantity="{{ contract_data.contract.quantity }}"
-        data-action-url="{% url 'activate_contract_view' contract_data.contract.pk %}"
-    >
-        Activate Shipment
-    </button>
-    <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-sm btn-danger">
-        Deny
-    </button>
-</form>
+                            <td class="px-4 py-2 text-truncate" style="max-width: 180px;">
+                                {% if role == 'buyer' %}
+                                    <div title="{{ contract_data.seller_name }}">{{ contract_data.seller_name|default:"N/A"|truncatechars:18 }}</div>
+                                    <small class="text-muted" title="{{ contract_data.contract.seller_address }}">
+                                        {{ contract_data.contract.seller_address|truncatechars:18 }}
+                                    </small>
+                                {% else %}
+                                    <div title="{{ contract_data.buyer_name }}">{{ contract_data.buyer_name|default:"N/A"|truncatechars:18 }}</div>
+                                    <small class="text-muted" title="{{ contract_data.contract.buyer_address }}">
+                                        {{ contract_data.contract.buyer_address|truncatechars:18 }}
+                                    </small>
+                                {% endif %}
+                            <td class="px-4 py-2 text-truncate" style="max-width: 150px;">
+    {% if contract_data.status == "Pending" %}
+        <span class="text-muted">Not Activated</span>
+    {% else %}
+        <a href="#" title="{{ contract_data.contract.contract_address }}" data-bs-toggle="tooltip">
+            {{ contract_data.contract.contract_address|truncatechars:10 }}
+        </a>
     {% endif %}
 </td>
-                        </tr>
+                            
+                            <td class="px-4 py-2">{{ contract_data.contract.quantity }}</td>
+                            
+                            <td class="px-4 py-2">{{ contract_data.contract.price }}</td>
+
+                           
+                            <td class="px-4 py-3 text-end">
+								<div class="btn-group" role="group">
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-sm btn-info text-white view-details-btn"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#contractDetailsModal"
+                                    >
+                                        Details
+                                    </button>
+                               {% if contract_data.contract.status == 'Pending' %}
+                                        {% if role == 'seller' %}
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-sm btn-success activate-contract-btn"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#activateContractModal"
+                                            data-contract-id="{{ contract_data.contract.pk }}"
+                                            data-product-name="{{ contract_data.contract.product_name }}"
+                                            data-quantity="{{ contract_data.contract.quantity }}"
+                                            data-action-url="{% url 'activate_contract_view' contract_data.contract.pk %}"
+                                        >
+                                            Activate
+                                        </button>
+                                        <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to deny (delete) this contract? This action is irreversible.');">
+                                                Deny
+                                            </button>
+                                        </form>
+                                        {% elif role == 'buyer' %}
+                                        <form method="POST" action="{% url 'deny_contract_view' contract_data.contract.pk %}" style="display:inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to cancel this contract? This action is irreversible.');">
+                                                Cancel
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -114,7 +158,7 @@
 <div class="modal fade" id="createContractModal" tabindex="-1" aria-labelledby="createContractModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-            <form method="post" action="{% url 'create_contract' %}" id="createContractForm">
+            <form method="post" id="createContractForm" action="{% url 'create_contract' %}" id="createContractForm">
                 {% csrf_token %}
                 <div class="modal-header">
                     <h5 class="modal-title" id="createContractModalLabel">Deploy New Escrow Contract</h5>
@@ -185,10 +229,45 @@
     <input type="hidden" name="deployer_address" value="{{ deployer_user.m_address }}">
 </div>
 {% endif %}
+<h6 class="fw-bold mt-3">Shipment Tracking Configuration</h6>
 
+<div class="row mt-2">
+    <div class="col-md-6">
+        <label class="form-label">Temperature Breach Window (seconds)</label>
+        <input type="number" 
+               class="form-control" 
+               name="temperature_time" 
+               min="60" 
+               placeholder="min 60 seconds"
+               required>
+        <small class="text-muted">Minimum: 60 seconds</small>
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">GPS Location Window (seconds)</label>
+        <input type="number" 
+               class="form-control" 
+               name="location_time" 
+               min="60" 
+               placeholder="min 60 seconds"
+               required>
+        <small class="text-muted">Minimum: 60 seconds</small>
+    </div>
+
+    <div class="col-md-6 mt-3">
+        <label class="form-label">Radius (meters)</label>
+        <input type="number" 
+               class="form-control" 
+               name="radius" 
+               min="30" 
+               placeholder="min 30 meters"
+               required>
+        <small class="text-muted">Minimum: 30 meters</small>
+    </div>
+</div>
 <div class="mb-3">
     <label for="quantity" class="form-label">Quantity (Units)</label>
-    <input type="number" class="form-control" id="quantity" name="quantity" required min="1" value="1" disabled>
+    <input type="number" class="form-control" id="quantity" name="quantity" required min="1" value="1">
 </div>
                     
 <div class="mb-3">
@@ -218,37 +297,131 @@
         </div>
     </div>
 </div>
-
-<div class="modal fade" id="activateContractModal" tabindex="-1" aria-labelledby="activateContractModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+<div class="modal fade" id="contractDetailsModal" tabindex="-1" aria-labelledby="contractDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-body">
-                <form id="activate-contract-form" method="POST">
-                    {% csrf_token %}
-                    <p>Contract ID: <span class="fw-bold" id="modal-contract-id"></span></p>
-                    <p>Product Name: <span class="fw-bold" id="modal-product-name"></span></p>
-                    <p>Quantity: <span class="fw-bold" id="modal-quantity"></span></p>
-                    
-                    <hr>
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="contractDetailsModalLabel">Contract Details #<span id="modal-details-id"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Shipment Information</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Product:</dt>
+                            <dd class="col-sm-8 fw-semibold" id="details-product-name"></dd>
 
-                    <label for="iot-device-select" class="form-label">Select IoT Device:</label>
-                    <select id="iot-device-select" name="iot_device_select" class="form-select mb-3">
-                        {% for device in iot_devices %}
-                            <option value="{{ device.pk }}">{{ device.device_name }}</option>
-                        {% endfor %}
-                    </select>
+                            <dt class="col-sm-4 text-muted">Quantity:</dt>
+                            <dd class="col-sm-8" id="details-quantity"></dd>
 
-                    <div class="text-end">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success">Confirm Activation</button>
+                            <dt class="col-sm-4 text-muted">Price (ETH):</dt>
+                            <dd class="col-sm-8" id="details-price"></dd>
+                        </dl>
                     </div>
-                </form>
+
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Temperature Requirements</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Min Temp (°C):</dt>
+                            <dd class="col-sm-8" id="details-min-temp"></dd>
+
+                            <dt class="col-sm-4 text-muted">Max Temp (°C):</dt>
+                            <dd class="col-sm-8" id="details-max-temp"></dd>
+                        </dl>
+                    </div>
+
+                    <div class="col-12 mt-4">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Blockchain & Participants</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-2 text-muted">Contract Address:</dt>
+                            <dd class="col-sm-10 text-break" id="details-contract-address"></dd>
+                            <dt class="col-sm-4 text-muted">Initial Payment TX:</dt>
+<dd class="col-sm-8 text-break small" id="details-init-payment"></dd>
+                        </dl>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-dark border-bottom pb-1">Buyer Details</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Name:</dt>
+                            <dd class="col-sm-8" id="details-buyer-name"></dd>
+
+                            <dt class="col-sm-4 text-muted">Address:</dt>
+                            <dd class="col-sm-8 text-break small" id="details-buyer-address"></dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-dark border-bottom pb-1">Seller Details</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Name:</dt>
+                            <dd class="col-sm-8" id="details-seller-name"></dd>
+
+                            <dt class="col-sm-4 text-muted">Address:</dt>
+                            <dd class="col-sm-8 text-break small" id="details-seller-address"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
+<div class="modal fade" id="activateContractModal" tabindex="-1" aria-labelledby="activateContractModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body">
+               <form id="activate-contract-form" method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="contract_id_hidden" id="contract_id_hidden">
+    <p>Contract ID: <span class="fw-bold" id="modal-contract-id"></span></p>
+    <p>Product Name: <span class="fw-bold" id="modal-product-name"></span></p>
+    <p>Quantity: <span class="fw-bold" id="modal-quantity"></span></p>
+
+    <hr>
+
+    <label for="iot-device-select" class="form-label">Select IoT Device:</label>
+    <select id="iot-device-select" name="iot_device_select" class="form-select mb-3" required>
+        {% for device in iot_devices %}
+            <option value="{{ device.pk }}">{{ device.device_name }}</option>
+        {% endfor %}
+    </select>
+
+    <div class="text-end">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-success">Confirm Activation</button>
+    </div>
+</form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+	document.getElementById("createContractForm").addEventListener("submit", function (e) {
+    const temp = parseInt(document.querySelector("[name='temperature_time']").value);
+    const loc = parseInt(document.querySelector("[name='location_time']").value);
+    const rad = parseInt(document.querySelector("[name='radius']").value);
+
+    if (temp < 60) {
+        alert("Temperature breach window must be at least 60 seconds.");
+        e.preventDefault();
+        return;
+    }
+    if (loc < 60) {
+        alert("GPS location window must be at least 60 seconds.");
+        e.preventDefault();
+        return;
+    }
+    if (rad < 30) {
+        alert("Radius must be at least 30 meters.");
+        e.preventDefault();
+        return;
+    }
+});
+     document.addEventListener('DOMContentLoaded', function() {
         
         // ===============================================
         // 1. BUYER (CREATE CONTRACT) MODAL LOGIC VARIABLES
@@ -288,7 +461,47 @@
         if (quantityInput) {
             quantityInput.addEventListener('input', updateTotalAmount);
         }
-        
+      const contractDetailsModal = document.getElementById('contractDetailsModal');
+
+        if (contractDetailsModal) {
+            contractDetailsModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget; // Button that triggered the modal
+                const row = button.closest('tr'); // The parent table row
+
+                // Selectors for all display elements in the modal
+                const detailsMap = {
+    'details-id': row.getAttribute('data-contract-id'),
+    'details-product-name': row.getAttribute('data-product-name'),
+    'details-quantity': row.getAttribute('data-quantity'),
+    'details-price': row.getAttribute('data-price') + ' ETH',
+    'details-min-temp': row.getAttribute('data-min-temp') + ' °C',
+    'details-max-temp': row.getAttribute('data-max-temp') + ' °C',
+    'details-contract-address': row.getAttribute('data-contract-address'),
+    'details-buyer-name': row.getAttribute('data-buyer-name'),
+    'details-buyer-address': row.getAttribute('data-buyer-address'),
+    'details-seller-name': row.getAttribute('data-seller-name'),
+    'details-seller-address': row.getAttribute('data-seller-address'),
+    'details-init-payment': row.getAttribute('data-init-payment'), // ← NEW
+};
+
+
+                // Populate the modal fields
+                for (const [id, value] of Object.entries(detailsMap)) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                       if (id === "details-init-payment" && value && value !== "Not available") {
+    // Split into hashes (if 2 — service fee + product)
+    const hashes = value.split(",");
+    const shortHashes = hashes.map(h => h.length > 12 ? `${h.slice(0, 6)}…${h.slice(-4)}` : h);
+    el.textContent = shortHashes.join(", ");
+    el.setAttribute("title", hashes.join("\n"));  // full hash on hover
+} else {
+    el.textContent = value;
+}
+                    }
+                }
+            });
+        }  
 
 if (sellerSelect) {
     sellerSelect.addEventListener("change", async function () {
@@ -368,10 +581,9 @@ if (sellerSelect) {
                     const availableQty = parseInt(row.dataset.quantity) || 1;
 
                     unitPriceData.value = price;
-                    quantityInput.disabled = false;
-                    quantityInput.max = availableQty;
-                    quantityInput.value = 1;
-
+quantityInput.disabled = false;
+quantityInput.removeAttribute("max");  // 🔥 allow any quantity
+quantityInput.value = 1;
                     deployContractBtn.disabled = false;
                     updateTotalAmount();
                 };
@@ -414,42 +626,31 @@ if (quantityInput) {
     quantityInput.addEventListener("input", updateTotalAmount);
 }
 
-        const activateForm = document.getElementById('activate-contract-form');
-        const activateModalElement = document.getElementById('activateContractModal');
+       const activateForm = document.getElementById('activate-contract-form');
+const activateModalElement = document.getElementById('activateContractModal');
         const iotDeviceSelect = document.getElementById('iot-device-select');
 
         if (activateForm && activateModalElement) {
-            activateModalElement.addEventListener('show.bs.modal', function (event) {
-                const button = event.relatedTarget;
-                
-                // Extract details from the button's data attributes
-                const contractId = button.getAttribute('data-contract-id');
-                const contractName = button.getAttribute('data-product-name');
-                const quantity = button.getAttribute('data-quantity');
-                const actionUrl = button.getAttribute('data-action-url');
-                
-                // Inject details into the modal body
-                const idEl = document.getElementById('modal-contract-id');
-                const nameEl = document.getElementById('modal-product-name');
-                const qtyEl = document.getElementById('modal-quantity');
+    activateModalElement.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
 
-                if (idEl) idEl.textContent = contractId;
-                if (nameEl) nameEl.textContent = contractName;
-                if (qtyEl) qtyEl.textContent = quantity;
-                
-                // Set the form action URL for submission
-                activateForm.action = actionUrl;
-                
-                // Update hidden input for contract ID for view logic
-                let hiddenInput = activateForm.querySelector('input[name="contract_id_hidden"]');
-                if (!hiddenInput) {
-                    hiddenInput = document.createElement('input');
-                    hiddenInput.type = 'hidden';
-                    hiddenInput.name = 'contract_id_hidden';
-                    activateForm.appendChild(hiddenInput);
-                }
-                hiddenInput.value = contractId;
-            });
+    const contractId = button.getAttribute('data-contract-id');
+    const contractName = button.getAttribute('data-product-name');
+    const quantity = button.getAttribute('data-quantity');
+    const actionUrl = button.getAttribute('data-action-url');  // already provided by the button
+
+    // Insert UI data
+    document.getElementById('modal-contract-id').textContent = contractId;
+    document.getElementById('modal-product-name').textContent = contractName;
+    document.getElementById('modal-quantity').textContent = quantity;
+
+    // Set form POST target
+    activateForm.setAttribute('action', actionUrl);
+
+    // Hidden input for backend verification
+    document.getElementById('contract_id_hidden').value = contractId;
+});
+
         }
         
         // IoT Device Selection (if needed for Seller modal logic)

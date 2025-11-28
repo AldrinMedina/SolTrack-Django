@@ -31,11 +31,20 @@
                     </thead>
                     <tbody>
     {% for shipment in ongoing_data %}
-    <tr 
-        data-contract-id="{{ shipment.contract_id }}" 
-        data-min-temp="{{ shipment.min_temp }}" 
-        data-max-temp="{{ shipment.max_temp }}"
-    >
+   <tr 
+    data-contract-id="{{ shipment.contract_id }}"
+    data-product-name="{{ shipment.product_name }}"
+    data-quantity="{{ shipment.quantity }}"
+    data-price="{{ shipment.price }}"
+    data-min-temp="{{ shipment.min_temp }}"
+    data-max-temp="{{ shipment.max_temp }}"
+    data-contract-address="{{ shipment.contract_address }}"
+    data-buyer-name="{{ shipment.buyer.full_name }}"
+    data-seller-name="{{ shipment.seller.full_name }}"
+    data-buyer-address="{{ shipment.buyer_address }}"
+    data-seller-address="{{ shipment.seller_address }}"
+data-init-payment="{{ shipment.init_payment }}">
+
         <td class="px-4 py-3">
             <span class="fw-medium text-dark">#{{ shipment.contract_id }}</span>
         </td>
@@ -88,9 +97,26 @@
         </div>
         
         <div>
-            <a href="{% url 'shipment_details' contract_id=shipment.contract_id %}" class="btn btn-sm btn-info text-white me-1">
-                Details
-            </a>
+            <button 
+    type="button"
+    class="btn btn-sm btn-primary"
+    data-bs-toggle="modal" 
+    data-bs-target="#contractDetailsModal"
+    data-contract-id="{{ shipment.contract_id }}"
+    data-product-name="{{ shipment.product_name }}"
+    data-quantity="{{ shipment.quantity }}"
+    data-price="{{ shipment.price }}"
+    data-min-temp="{{ shipment.min_temp }}"
+    data-max-temp="{{ shipment.max_temp }}"
+    data-contract-address="{{ shipment.contract_address }}"
+    data-buyer-name="{{ shipment.buyer.full_name }}"
+    data-buyer-address="{{ shipment.buyer_address }}"
+    data-seller-name="{{ shipment.seller.full_name }}"
+    data-seller-address="{{ shipment.seller_address }}"
+
+data-init-payment="{{ shipment.init_payment }}">
+    Contract Details
+</button>
 <button
   type="button"
   class="btn btn-outline-primary btn-sm btn-view-log"
@@ -152,7 +178,78 @@
     </div>
   </div>
 </div>
+<div class="modal fade" id="contractDetailsModal" tabindex="-1" aria-labelledby="contractDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="contractDetailsModalLabel">Contract Details #<span id="modal-details-id"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Shipment Information</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Product:</dt>
+                            <dd class="col-sm-8 fw-semibold" id="details-product-name"></dd>
 
+                            <dt class="col-sm-4 text-muted">Quantity:</dt>
+                            <dd class="col-sm-8" id="details-quantity"></dd>
+
+                            <dt class="col-sm-4 text-muted">Price (ETH):</dt>
+                            <dd class="col-sm-8" id="details-price"></dd>
+                        </dl>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Temperature Requirements</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Min Temp (°C):</dt>
+                            <dd class="col-sm-8" id="details-min-temp"></dd>
+
+                            <dt class="col-sm-4 text-muted">Max Temp (°C):</dt>
+                            <dd class="col-sm-8" id="details-max-temp"></dd>
+                        </dl>
+                    </div>
+
+                    <div class="col-12 mt-4">
+                        <h6 class="fw-bold text-primary border-bottom pb-1">Blockchain & Participants</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-2 text-muted">Contract Address:</dt>
+                            <dd class="col-sm-10 text-break" id="details-contract-address"></dd>
+                            <dt class="col-sm-2 text-muted">Initial TX:</dt>
+<dd class="col-sm-10 text-break small" id="details-init-payment"></dd>
+                        </dl>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-dark border-bottom pb-1">Buyer Details</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Name:</dt>
+                            <dd class="col-sm-8" id="details-buyer-name"></dd>
+
+                            <dt class="col-sm-4 text-muted">Address:</dt>
+                            <dd class="col-sm-8 text-break small" id="details-buyer-address"></dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-dark border-bottom pb-1">Seller Details</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted">Name:</dt>
+                            <dd class="col-sm-8" id="details-seller-name"></dd>
+
+                            <dt class="col-sm-4 text-muted">Address:</dt>
+                            <dd class="col-sm-8 text-break small" id="details-seller-address"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -291,7 +388,46 @@ function fetchAndDisplayLog(contractId) {
 
 document.addEventListener('DOMContentLoaded', () => {
     startTemperatureStreams();
+ const contractDetailsModal = document.getElementById('contractDetailsModal');
 
+        if (contractDetailsModal) {
+            contractDetailsModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget; // Button that triggered the modal
+                const row = button.closest('tr'); // The parent table row
+
+                // Selectors for all display elements in the modal
+                const detailsMap = {
+    'details-id': row.getAttribute('data-contract-id'),
+    'details-product-name': row.getAttribute('data-product-name'),
+    'details-quantity': row.getAttribute('data-quantity'),
+    'details-price': row.getAttribute('data-price') + ' ETH',
+    'details-min-temp': row.getAttribute('data-min-temp') + ' °C',
+    'details-max-temp': row.getAttribute('data-max-temp') + ' °C',
+    'details-contract-address': row.getAttribute('data-contract-address'),
+    'details-buyer-name': row.getAttribute('data-buyer-name'),
+    'details-buyer-address': row.getAttribute('data-buyer-address'),
+    'details-seller-name': row.getAttribute('data-seller-name'),
+    'details-seller-address': row.getAttribute('data-seller-address'),
+    'details-init-payment': row.getAttribute('data-init-payment'),   
+};
+
+                // Populate the modal fields
+                for (const [id, value] of Object.entries(detailsMap)) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        if (id === "details-init-payment" && value && value !== "Not available") {
+    // Split into hashes (if 2 — service fee + product)
+    const hashes = value.split(",");
+    const shortHashes = hashes.map(h => h.length > 12 ? `${h.slice(0, 6)}…${h.slice(-4)}` : h);
+    el.textContent = shortHashes.join(", ");
+    el.setAttribute("title", hashes.join("\n"));  // full hash on hover
+} else {
+    el.textContent = value;
+}
+                    }
+                }
+            });
+        }  
     document.querySelectorAll(".btn-view-log").forEach(btn => {
         btn.addEventListener("click", () => {
             const contractId = btn.getAttribute("data-contract-id");

@@ -1,28 +1,38 @@
 <!-- Sidebar -->
 <div class="sidebar">
     <div class="p-4">
-        <h4 class="text-white fw-bold mb-4">Soltrack</h4>
-        
-        <nav class="nav flex-column">
-            <a href="{% url 'overview' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-house me-2"></i>Overview
-            </a>
-            <a href="{% url 'active' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-play-circle me-2"></i>Active Contracts
-                <span class="badge bg-success ms-auto" id="activeBadge">0</span>
-            </a>
-            <a href="{% url 'ongoing' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-clock me-2"></i>Ongoing Shipments
-                <span class="badge bg-warning ms-auto" id="ongoingBadge">0</span>
-            </a>
-            <a href="{% url 'completed' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-check-circle me-2"></i>Completed
-                <span class="badge bg-primary ms-auto" id="completedBadge">0</span>
-            </a>
-            <a href="{% url 'alerts' %}" class="nav-link nav-link-custom">
-                <i class="bi bi-exclamation-triangle me-2"></i>Alerts
-                <span class="badge bg-danger ms-auto" id="alertsBadge">0</span>
-            </a>
+       <h4 class="text-white fw-bold mb-3">Soltrack</h4>
+<div class="mb-3 pb-3 border-bottom border-light">
+    <h3 class="text-white fw-bold mb-0" style="font-size: 1.1rem;">{{ user.organization }}</h3>
+    <small class="text-white d-block">{{ user.full_name }}</small>
+
+    {% if eth_balance %}
+        <small class="text-warning d-block mt-1">
+            <i class="bi bi-wallet2"></i>
+            {{ eth_balance|floatformat:4 }} ETH
+        </small>
+    {% endif %}
+</div>
+<nav class="nav flex-column">
+    <a href="{% url 'overview' %}" class="nav-link nav-link-custom">
+        <i class="bi bi-house me-2"></i>Overview
+    </a>
+    <a href="{% url 'active' %}" class="nav-link nav-link-custom">
+        <i class="bi bi-play-circle me-2"></i>Contracts
+        <span class="badge bg-success ms-auto" id="activeBadge">0</span>
+    </a>
+    <a href="{% url 'ongoing' %}" class="nav-link nav-link-custom">
+        <i class="bi bi-clock me-2"></i>Ongoing Shipments
+        <span class="badge bg-warning ms-auto" id="ongoingBadge">0</span>
+    </a>
+    <a href="{% url 'completed' %}" class="nav-link nav-link-custom">
+        <i class="bi bi-check-circle me-2"></i>Completed
+        <span class="badge bg-primary ms-auto" id="completedBadge">0</span>
+    </a>
+    <a href="{% url 'alerts' %}" class="nav-link nav-link-custom">
+        <i class="bi bi-exclamation-triangle me-2"></i>Alerts
+        <span class="badge bg-danger ms-auto" id="alertsBadge">0</span>
+    </a>
 
             {% if user.role|lower == "seller" %}
             <a href="{% url 'product_manager' %}" class="nav-link nav-link-custom mt-2">
