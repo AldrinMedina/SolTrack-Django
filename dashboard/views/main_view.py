@@ -33,6 +33,7 @@ from django.db import models
 from django.db.models import Avg, Min, Max, Q
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
+import asyncio
 
 from accounts.models import CustomUser
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
@@ -68,6 +69,53 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
+async def async_event_stream(contract_id):
+    """Async, non-blocking SSE for real-time temperature"""
+    while True:
+        # Validate contract
+        contract = Contract.objects.filter(contract_id=contract_id).first()
+        if not contract:
+            yield "data: {\"error\": \"Contract not found\"}\n\n"
+            await asyncio.sleep(4)
+            continue
+
+        # Fetch assigned IoT device
+        device = contract.IoT_Assigned
+        if not device:
+            yield "data: {\"error\": \"No IoT device assigned\"}\n\n"
+            await asyncio.sleep(4)
+            continue
+
+        # Fetch latest IoT data
+        last_data = IoTData.objects.filter(
+            device=device
+        ).order_by("-recorded_at").first()
+
+        if last_data:
+            payload = {
+                "success": True,
+                "temperature": float(last_data.temperature) if last_data.temperature is not None else None,
+                "timestamp": last_data.recorded_at.strftime("%b %d, %Y | %I:%M:%S %p"),
+                "min_temp": contract.min_temp,
+                "max_temp": contract.max_temp,
+                "device_name": device.device_name,
+                "lat": last_data.gps_lat,
+                "long": last_data.gps_long,
+            }
+        else:
+            payload = {
+                "success": False,
+                "error": "No IoT data available",
+                "temperature": None,
+                "timestamp": None,
+            }
+
+        # Send SSE
+        yield f"data: {json.dumps(payload)}\n\n"
+
+        # Non-blocking delay (safe for Render)
+        await asyncio.sleep(4)
+
 def get_summarized_log_data(device_id):
     print("testt")
     readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
@@ -272,7 +320,10 @@ def fetch_latest_iot(contract_id):
 
 		return {
 			"temperature": latest.temperature,
-			 "recorded_at": latest.created_at,
+			"recorded_at": latest.created_at,
+			"gps_lat": latest.gps_lat,
+			"gps_long": latest.gps_long
+
 		}
 
 	except Exception as e:
@@ -433,6 +484,15 @@ def stream_contract_temperature(request, contract_id):
 	return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
 	response["Cache-Control"] = "no-cache"
 	return response
+
+# def stream_contract_temperature(request, contract_id):
+#     response = StreamingHttpResponse(
+#         async_event_stream(contract_id),
+#         content_type="text/event-stream"
+#     )
+#     response["Cache-Control"] = "no-cache"
+#     response["X-Accel-Buffering"] = "no"
+#     return response
 
 				
 def _get_live_iot_data():
@@ -649,8 +709,11 @@ def active_view(request):
 
 
 	# 3. Assemble Context Data (simplified for clarity)
+	
+	temperature, gps_lat, gps_long = fetch_adafruit_iot_data()
 	active_contracts = []
 	for contract_instance in contracts_queryset:
+		latest_data = fetch_latest_iot(contract_instance.contract_id)
 		# Check if buyer/seller fields are populated before accessing full_name
 		buyer_name = getattr(contract_instance.buyer, 'full_name', contract_instance.buyer_address)
 		seller_name = getattr(contract_instance.seller, 'full_name', contract_instance.seller_address)
@@ -663,13 +726,16 @@ def active_view(request):
 		current_temp_str, _ = _get_current_temp(temp_threshold_float) 
 
 		active_contracts.append({
-			'contract': contract_instance, # Contains .pk, .product_name, .quantity
+			'contract': contract_instance,
 			'buyer_name': buyer_name,
 			'seller_name': seller_name,
-			'current_temp': current_temp_str, 
+			'current_temp': current_temp_str,
+			'gps_lat': gps_lat,
+			'gps_long': gps_long,
 			'status': status,
 			'status_class': status_class,
 		})
+
 	
 	# 4. IoT Device Filter
 	ready_iot_devices = IoTDevice.objects.filter(status__iexact='Available')
@@ -853,12 +919,11 @@ def ongoing_view(request):
 
 		if device:
 			latest_data = IoTData.objects.filter(device=device).order_by('-created_at').first()
-		else:
-			latest_data = None	
 			if latest_data:
 				current_temp = latest_data.temperature if latest_data.temperature is not None else "N/A"
 				gps_lat = latest_data.gps_lat
 				gps_lon = latest_data.gps_long
+
 		address_record = getattr(contract, "address_record", None)
 		init_tx = None
 		if address_record and address_record.init_payment_add:

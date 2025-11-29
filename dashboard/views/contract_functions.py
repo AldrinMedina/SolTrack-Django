@@ -702,11 +702,12 @@ def process_contract_action(request, contract_id):
 		
 		print(f"[{datetime.now().strftime('%H:%M:%S')}] 4. Building Tx data (Value: {amount_eth} ETH)") # <-- Now prints the actual price
 		# Fetch dynamic base fee
-		latest = web3.eth.fee_history(1, 'latest', [25])
+		latest = web3.eth.fee_history(1, "latest", [10])
 		base_fee = latest['baseFeePerGas'][-1]
 
-		priority_fee = web3.to_wei(1, "gwei")  # safe, low, Sepolia compatible
-		max_fee = base_fee + (priority_fee * 2)  # ensure > priority
+		priority_fee = web3.to_wei(2, "gwei")      # slightly higher
+		max_fee = base_fee + priority_fee * 5      # always > priority
+
 
 		tx_data = contract_func(recipient_address).build_transaction({
 			'chainId': web3.eth.chain_id,
@@ -866,11 +867,12 @@ def execute_onchain_action(contract_db, action):
 			return False
 
 		# Fetch dynamic base fee
-		latest = web3.eth.fee_history(1, 'latest', [25])
+		latest = web3.eth.fee_history(1, "latest", [10])
 		base_fee = latest['baseFeePerGas'][-1]
 
-		priority_fee = web3.to_wei(1, "gwei")  # safe, low, Sepolia compatible
-		max_fee = base_fee + (priority_fee * 2)  # ensure > priority
+		priority_fee = web3.to_wei(2, "gwei")      # slightly higher
+		max_fee = base_fee + priority_fee * 5      # always > priority
+
 
 		tx_data = contract_func(recipient_address).build_transaction({
 			'chainId': web3.eth.chain_id,

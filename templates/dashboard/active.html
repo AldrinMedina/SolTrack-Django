@@ -232,16 +232,16 @@
 <h6 class="fw-bold mt-3">Shipment Tracking Configuration</h6>
 
 <div class="row mt-2">
-    <div class="col-md-6">
-        <label class="form-label">Temperature Breach Window (seconds)</label>
+    
         <input type="number" 
                class="form-control" 
                name="temperature_time" 
                min="60" 
+               max="120"
+               value="120"
                placeholder="min 60 seconds"
-               required>
-        <small class="text-muted">Minimum: 60 seconds</small>
-    </div>
+                hidden>
+   
 
     <div class="col-md-6">
         <label class="form-label">GPS Location Window (seconds)</label>
@@ -254,16 +254,13 @@
         <small class="text-muted">Minimum: 60 seconds</small>
     </div>
 
-    <div class="col-md-6 mt-3">
-        <label class="form-label">Radius (meters)</label>
         <input type="number" 
                class="form-control" 
                name="radius" 
                min="30" 
+               value="50"
                placeholder="min 30 meters"
-               required>
-        <small class="text-muted">Minimum: 30 meters</small>
-    </div>
+             hidden>
 </div>
 <div class="mb-3">
     <label for="quantity" class="form-label">Quantity (Units)</label>
