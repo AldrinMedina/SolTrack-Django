@@ -34,7 +34,7 @@ set_solc_version('0.5.16')
 SEPOLIA_URL = os.getenv("SEPOLIA_RPC_URL", "https://sepolia.infura.io/v3/0a916ab0592e408d9c9bee7ff50a2fd6")
 web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 DEPLOYER_PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
-FIXED_ESCROW_FEE_ETH = 0.005
+FIXED_ESCROW_FEE_ETH = 0.01
 solidity_code = '''
 pragma solidity 0.5.16;
 
@@ -185,10 +185,11 @@ def deny_contract(request, contract_id):
 		category="Contract"
 	)
 
-    # delete it
-    contract.delete()
+    contract.status = "Denied"
+    contract.end_date = timezone.now()
+    contract.save()
 
-    messages.success(request, f"Contract {contract_id} has been denied and removed.")
+    messages.success(request, f"Contract {contract_id} has been denied.")
     return redirect("active")
 
 def deploy_contract_on_chain(contract_obj):
@@ -520,7 +521,6 @@ def deploy_contract_and_save(
         contract_abi=contract_interface["abi"],
         start_coord=StartCoords,
         end_coord=EndCoords,
-        end_date=timezone.now() + timezone.timedelta(days=7),
     )
 
     return contract_address
@@ -628,7 +628,6 @@ def create_contract_view(request):
             contract_abi={},
             start_coord=start_coords,
             end_coord=end_coords,
-            end_date=timezone.now() + timezone.timedelta(days=7),
             buyer=buyer if hasattr(buyer, 'pk') else None,
             seller=seller_user,
 
@@ -926,6 +925,8 @@ def execute_onchain_action(contract_db, action):
 				contract_db.status = new_status
 				if new_status == 'Completed':
 					contract_db.end_date = timezone.now()
+				if new_status == 'Refunded':
+					contract_db.end_date = timezone.now()	
 				contract_db.save()
 			try:
 				ca = ContractAddresses.objects.get(contract=contract_db)
@@ -960,87 +961,136 @@ def execute_onchain_action(contract_db, action):
 
 
 def contract_temp_out_of_range_for(contract_db, window_seconds=300):
+    """
+    Checks if temperature has been outside the allowed bounds for too long.
+    Controls the IoT BUZZER via Adafruit IO:
+        - Turns BUZZER ON if temp goes out of range
+        - Keeps BUZZER ON if violation persists beyond window_seconds (refund condition)
+        - Turns BUZZER OFF when temperature returns to normal
+    Returns True only when refund condition is met.
+    """
 
-	if not contract_db or not getattr(contract_db, 'IoT_Assigned', None):
-		print(f"no iot assigned{getattr(contract_db, 'contract_id', '?')}")
-		return False
+    # If contract doesn't exist or no IoT device assigned → buzzer OFF
+    if not contract_db or not getattr(contract_db, 'IoT_Assigned', None):
+        print(f"[TEMP CHECK] No IoT device assigned to contract {getattr(contract_db, 'contract_id', '?')}")
+        try:
+            set_buzzer_state("OFF")
+        except Exception:
+            pass
+        return False
 
-	device = contract_db.IoT_Assigned
-	now = timezone.now()
-	window_start = now - timedelta(seconds=window_seconds + 60)  # small buffer
-	max_t = getattr(contract_db, "max_temp", None)
-	min_t = getattr(contract_db, "min_temp", None)
+    device = contract_db.IoT_Assigned
+    now = timezone.now()
 
-	if max_t is None or min_t is None:
-		print(f"{contract_db.contract_id} missing min/max temperature.")
-		return False
+    # Look back slightly more than window to catch late logs
+    window_start = now - timedelta(seconds=window_seconds + 60)
 
-	readings = IoTData.objects.filter(
-		device=device,
-		created_at__gte=window_start
-	).order_by('recorded_at').values('temperature',  'created_at')
+    min_t = getattr(contract_db, "min_temp", None)
+    max_t = getattr(contract_db, "max_temp", None)
 
-	if not readings.exists():
-		print(f"no recent temp reads{contract_db.contract_id}.")
-		return False
+    if min_t is None or max_t is None:
+        print(f"[TEMP CHECK] Contract {contract_db.contract_id} missing min/max temp.")
+        try:
+            set_buzzer_state("OFF")
+        except Exception:
+            pass
+        return False
 
-	violation_start = None
-	violation_duration = 0
-	last_ts = None
+    readings = IoTData.objects.filter(
+        device=device,
+        created_at__gte=window_start
+    ).order_by('recorded_at').values('temperature', 'created_at')
 
-	for r in readings:
-		temp = r['temperature']
-		ts = r['created_at']
+    if not readings.exists():
+        print(f"[TEMP CHECK] No readings for contract {contract_db.contract_id}.")
+        try:
+            set_buzzer_state("OFF")
+        except Exception:
+            pass
+        return False
 
-		if temp is None:
-			continue
+    violation_start = None
+    violation_duration = 0
+    last_ts = None
 
-		out_of_range = (temp > max_t) or (temp < min_t)
+    # Evaluate each reading in the window
+    for r in readings:
+        temp = r['temperature']
+        ts = r['created_at']
 
-		if out_of_range:
-			if violation_start is None:
-				violation_start = ts
-			last_ts = ts
-		else:
-			# Close current violation segment if we go back in range
-			if violation_start and last_ts:
-				segment_duration = (last_ts - violation_start).total_seconds()
-				violation_duration = max(violation_duration, segment_duration)
-				violation_start = None
-				last_ts = None
+        if temp is None:
+            continue
 
-	# Final open segment
-	if violation_start and last_ts:
-		segment_duration = (last_ts - violation_start).total_seconds()
-		violation_duration = max(violation_duration, segment_duration)
+        out_of_range = (temp > max_t) or (temp < min_t)
 
-	if violation_duration > 0:
-		create_alert(
-			contract=contract_db,
-			device=device,
-			alert_type="Warning",
-			message=f"Temperature exceeded safe range for {violation_duration:.0f} seconds.",
-			severity="Warning",
-			category="Temperature"
-		)
+        if out_of_range:
+            if violation_start is None:
+                violation_start = ts
+            last_ts = ts
+        else:
+            # Temperature returned in range → close segment
+            if violation_start and last_ts:
+                segment = (last_ts - violation_start).total_seconds()
+                violation_duration = max(violation_duration, segment)
+                violation_start = None
+                last_ts = None
 
-		percent = (violation_duration / window_seconds) * 100
-		print(f"{contract_db.contract_id}  temp breached {violation_duration:.1f} / {window_seconds} secs ({percent:.1f}%).")
+    # If still out of range at the end, close the violation window
+    if violation_start and last_ts:
+        segment = (last_ts - violation_start).total_seconds()
+        violation_duration = max(violation_duration, segment)
 
-	if violation_duration >= window_seconds:
-		create_alert(
-			contract=contract_db,
-			device=device,
-			alert_type="Danger",
-			message=f"Temperature breach exceeded allowable time. Contract will be refunded.",
-			severity="Critical",
-			category="Temperature"
-		)
+    # If ANY recorded violation happened → BUZZER ON
+    if violation_duration > 0:
+        try:
+            set_buzzer_state("ON")
+        except Exception:
+            pass
 
-		print(f"{contract_db.contract_id} temp breached{violation_duration:.1f}s refunding")
-		return True
+        # Create a warning alert
+        create_alert(
+            contract=contract_db,
+            device=device,
+            alert_type="Warning",
+            message=f"Temperature exceeded safe range for {violation_duration:.0f} seconds.",
+            severity="Warning",
+            category="Temperature"
+        )
 
-	return False
+        percent = (violation_duration / window_seconds) * 100
+        print(f"[TEMP WARNING] Contract {contract_db.contract_id}: "
+              f"{violation_duration:.1f}/{window_seconds}s | {percent:.1f}% threshold")
+
+    # CRITICAL breach (refund condition)
+    if violation_duration >= window_seconds:
+        try:
+            set_buzzer_state("ON")  # KEEP ON during refund scenario
+        except Exception:
+            pass
+
+        create_alert(
+            contract=contract_db,
+            device=device,
+            alert_type="Danger",
+            message="Temperature breach exceeded allowable time. Contract will be refunded.",
+            severity="Critical",
+            category="Temperature"
+        )
+
+        print(f"[TEMP BREACH] Contract {contract_db.contract_id}: refund triggered "
+              f"after {violation_duration:.1f}s out-of-range")
+        return True
+
+    # No critical breach → BUZZER OFF (temp back to normal)
+    try:
+        set_buzzer_state("OFF")
+    except Exception:
+        pass
+
+    return False
+
+
+
 def contract_within_end_coords_for(contract_db, radius_km=0.01, window_seconds=180):
 
 	if not contract_db or not getattr(contract_db, 'IoT_Assigned', None):

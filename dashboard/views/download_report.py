@@ -180,6 +180,7 @@ def download_contract_report(request, contract_id):
         ['Deployment Date', getattr(contract, 'start_date', None).strftime('%B %d, %Y') if getattr(contract, 'start_date', None) else "N/A"],
         ['Completion Date', getattr(contract, 'end_date', None).strftime('%B %d, %Y') if getattr(contract, 'end_date', None) else "N/A"],
         ['Status', getattr(contract, 'status', 'N/A')],
+        ['Contract Address', getattr(contract, 'contract_address', 'N/A') or "N/A"],
     ]
     contract_table = Table(contract_data, colWidths=[2.2*inch, 4.5*inch])
     contract_table.setStyle(TableStyle([

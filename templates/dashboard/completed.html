@@ -41,6 +41,8 @@
                                     <span class="badge bg-{{ status_class }} px-3 py-2 rounded-pill">{{ item.status }}</span>
                                     {% if item.refunded %}
 										<i class="bi bi-x-circle-fill text-danger"></i>
+                                    {% elif item.denied %}  
+                                        <i class="bi bi-slash-circle-fill text-warning"></i>
 									{% else %}
 										<i class="bi bi-check-circle-fill text-primary"></i>
 									{% endif %}
@@ -61,9 +63,11 @@
                             </td>
                             <td class="px-3 py-3">
                                 {% if contract.contract_address and contract.contract_address != '0x' %}
-                                    <code class="text-truncate d-block fw-semibold text-dark" style="font-size: 0.8rem; max-width: 130px;">
+                                    <!-- <code class="text-truncate d-block fw-semibold text-dark" style="font-size: 0.8rem; max-width: 130px;">
                                         {{ contract.contract_address|truncatechars:18 }}
-                                    </code>
+                                    </code> -->
+                                    <a href="https://sepolia.etherscan.io/address/{{ contract.contract_address }}" target="_blank" class="text-truncate d-block fw-semibold text-dark" style="font-size: 0.8rem; max-width: 130px;">
+                                        {{ contract.contract_address|truncatechars:18 }}
                                 {% else %}
                                     <span class="text-danger fw-semibold" style="font-size: 0.8rem;">Not Deployed</span>
                                 {% endif %}

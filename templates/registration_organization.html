@@ -117,6 +117,21 @@
           {% endfor %}
         </div>
 
+        <div class="form-check mt-3 mb-4">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="termsCheck"
+            required
+          >
+          <label class="form-check-label" for="termsCheck">
+            I agree to the
+            <a href="#" data-bs-toggle="modal" data-bs-target="#termsModal">
+              Terms and Conditions
+            </a>
+          </label>
+        </div>
+
         <!-- Buttons -->
         <div class="d-flex gap-2 align-items-center justify-content-center mt-4">
           <button type="submit" class="btn btn-success px-4">
@@ -128,8 +143,219 @@
         </div>
       </form>
 
+      <!-- Terms and Conditions Modal -->
+      <div
+        class="modal fade"
+        id="termsModal"
+        tabindex="-1"
+        aria-labelledby="termsModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+
+            <div class="modal-header">
+              <h5 class="modal-title" id="termsModalLabel">
+                SolTrack – Terms and Conditions
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+              <div class="terms-content">
+
+                <p><strong>Last Updated:</strong> November 28, 2025</p>
+
+                <p>
+                  Welcome to <strong>SolTrack</strong>. These Terms and Conditions ("Terms")
+                  govern your access to and use of the SolTrack platform, including its web
+                  application, smart contracts, Internet of Things (IoT) integrations, and
+                  related services (collectively, the "Service"). By accessing or using
+                  SolTrack, you agree to be bound by these Terms. If you do not agree, you may
+                  not use the Service.
+                </p>
+
+                <hr>
+
+                <h6>1. Definitions</h6>
+                <ul>
+                  <li><strong>“SolTrack”</strong> refers to the platform that provides vaccine and medical logistics tracking using IoT and hybrid smart contracts.</li>
+                  <li><strong>“User”</strong> refers to any individual or organization that accesses or uses the Service.</li>
+                  <li><strong>“Contract”</strong> refers to a smart contract deployed through the SolTrack platform.</li>
+                  <li><strong>“IoT Data”</strong> refers to sensor-generated data such as temperature, timestamps, and related logistics information.</li>
+                  <li><strong>“Escrow”</strong> refers to funds temporarily held by smart contracts until contract conditions are met.</li>
+                </ul>
+
+                <hr>
+
+                <h6>2. Eligibility</h6>
+                <p>
+                  You must be at least 18 years old and have the legal capacity to enter into
+                  binding agreements to use SolTrack. By using the Service, you represent and
+                  warrant that you meet these requirements.
+                </p>
+
+                <hr>
+
+                <h6>3. Description of the Service</h6>
+                <ul>
+                  <li>Monitoring and tracking of temperature-sensitive medical goods using IoT sensors;</li>
+                  <li>Deployment and management of hybrid smart contracts;</li>
+                  <li>Escrow handling of payments related to logistics transactions;</li>
+                  <li>Alerts and reports based on predefined temperature and delivery conditions.</li>
+                </ul>
+                <p>
+                  SolTrack acts as a <strong>third-party facilitator</strong> and does not
+                  directly manufacture, transport, or store medical products.
+                </p>
+
+                <hr>
+
+                <h6>4. User Responsibilities</h6>
+                <ul>
+                  <li>Provide accurate and complete information during registration and contract creation;</li>
+                  <li>Maintain the confidentiality of your wallet, credentials, and private keys;</li>
+                  <li>Ensure that IoT devices connected to the platform are properly calibrated and authorized;</li>
+                  <li>Comply with all applicable laws, regulations, and industry standards related to medical logistics.</li>
+                </ul>
+                <p>
+                  You are solely responsible for all activities conducted through your account
+                  or wallet.
+                </p>
+
+                <hr>
+
+                <h6>5. Smart Contracts and Blockchain Transactions</h6>
+                <ul>
+                  <li>All smart contracts deployed through SolTrack are executed automatically on the blockchain.</li>
+                  <li>Blockchain transactions are <strong>irreversible</strong> once confirmed.</li>
+                  <li>SolTrack is not responsible for losses due to incorrect contract parameters, user error, or blockchain network failures.</li>
+                </ul>
+                <p>
+                  Users are strongly advised to review all contract details before deployment
+                  or confirmation.
+                </p>
+
+                <hr>
+
+                <h6>6. Escrow and Payments</h6>
+                <ul>
+                  <li>Funds placed in escrow are governed strictly by the logic of the deployed smart contract.</li>
+                  <li>Release or refund of funds depends on fulfillment or violation of contract conditions.</li>
+                  <li>SolTrack does not manually intervene in escrow decisions unless explicitly required by system rules.</li>
+                </ul>
+
+                <hr>
+
+                <h6>7. IoT Data and Logs</h6>
+                <ul>
+                  <li>SolTrack collects and processes IoT data for monitoring and verification purposes.</li>
+                  <li>Temperature and logistics logs may be stored temporarily during active contracts.</li>
+                  <li>Upon contract completion, data may be archived, anonymized, exported, or deleted in accordance with system policies.</li>
+                </ul>
+                <p>
+                  Users acknowledge that IoT data accuracy depends on proper device setup and
+                  network connectivity.
+                </p>
+
+                <hr>
+
+                <h6>8. Data Privacy</h6>
+                <p>
+                  SolTrack processes personal and operational data in accordance with
+                  applicable data protection laws. By using the Service, you consent to the
+                  collection, storage, and processing of data necessary for system operation,
+                  reporting, and security.
+                </p>
+
+                <hr>
+
+                <h6>9. System Availability</h6>
+                <p>
+                  SolTrack aims to provide reliable service but does not guarantee
+                  uninterrupted or error-free operation.
+                </p>
+
+                <hr>
+
+                <h6>10. Limitation of Liability</h6>
+                <ul>
+                  <li>SolTrack shall not be liable for indirect, incidental, or consequential damages;</li>
+                  <li>SolTrack is not responsible for losses resulting from sensor malfunction, blockchain congestion, smart contract vulnerabilities, or third-party services.</li>
+                </ul>
+                <p><strong>Use of the Service is at your own risk.</strong></p>
+
+                <hr>
+
+                <h6>11. Intellectual Property</h6>
+                <p>
+                  All content, software, designs, and documentation related to SolTrack are the
+                  intellectual property of the project owners unless otherwise stated.
+                </p>
+
+                <hr>
+
+                <h6>12. Termination</h6>
+                <p>
+                  SolTrack reserves the right to suspend or terminate access to the Service if
+                  a user violates these Terms.
+                </p>
+
+                <hr>
+
+                <h6>13. Modifications to Terms</h6>
+                <p>
+                  SolTrack may update these Terms at any time. Continued use of the Service
+                  constitutes acceptance of the revised Terms.
+                </p>
+
+                <hr>
+
+                <h6>14. Governing Law</h6>
+                <p>
+                  These Terms shall be governed by and construed in accordance with the laws
+                  of the <strong>Republic of the Philippines</strong>.
+                </p>
+
+                <hr>
+
+                <h6>15. Contact Information</h6>
+                <p>
+                  <strong>SolTrack Team</strong><br>
+                  Email: [Insert Contact Email]
+                </p>
+
+                <hr>
+
+                <p class="text-center mt-3">
+                  By using SolTrack, you acknowledge that you have read, understood, and
+                  agreed to these Terms and Conditions.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+
     </div>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
     const connectBtn = document.getElementById('connectMetaMask');
     const addressInput = document.querySelector('[name="m_address"]');

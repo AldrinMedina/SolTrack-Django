@@ -21,6 +21,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from solcx import compile_source, install_solc, set_solc_version
 from web3 import Web3
 from web3.exceptions import ContractLogicError
+from supabase import create_client
 
 from django.core.cache import cache
 from django.shortcuts import render, get_object_or_404, redirect
@@ -34,6 +35,7 @@ from django.db.models import Avg, Min, Max, Q
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 import asyncio
+
 
 from accounts.models import CustomUser
 from dashboard.models import Contract, IoTDevice, IoTDataHistory, Alert, IoTData, Product
@@ -51,7 +53,7 @@ web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
 
 ADAFRUIT_IO_USERNAME = os.getenv("ADAFRUIT_IO_USERNAME")
 ADAFRUIT_IO_KEY = os.getenv("ADAFRUIT_IO_KEY")
-aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
 SUPABASE_URL = os.getenv("SUPA_REST")
 SUPABASE_KEY = os.getenv("SUPA_SERVICE_KEY")
 
@@ -69,6 +71,11 @@ SUPABASE_HEADERS = {
 	"Content-Type": "application/json",
 	"Prefer": "return=minimal"
 }
+
+def get_aio_client():
+    return Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
+
 async def async_event_stream(contract_id):
     """Async, non-blocking SSE for real-time temperature"""
     while True:
@@ -116,6 +123,14 @@ async def async_event_stream(contract_id):
         # Non-blocking delay (safe for Render)
         await asyncio.sleep(4)
 
+def push_to_supabase(temperature, gps_lat, gps_long, device_id):
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)  # <-- RECREATE EACH TIME
+    supabase.table("iot_data").insert({
+        "temperature": temperature,
+        "lat": gps_lat,
+        "lon": gps_long,
+        "device_id": device_id
+    }).execute()
 def get_summarized_log_data(device_id):
     print("testt")
     readings = IoTData.objects.filter(device_id=device_id).order_by('recorded_at')
@@ -210,6 +225,22 @@ def get_summarized_log_data(device_id):
     
     
 @login_required(login_url='login')
+
+def set_buzzer_state(state: str):
+    """
+    Sends 'ON' or 'OFF' value to your Adafruit IO buzzer-feed.
+    Feed path: gabaguan/feeds/buzzer-feed
+    """
+    try:
+        aio = Client(
+            os.getenv("ADAFRUIT_IO_USERNAME"),
+            os.getenv("ADAFRUIT_IO_KEY")
+        )
+        aio.send_data("buzzer-feed", state)  # <-- THIS sends to Adafruit
+        print(f"[BUZZER] state → {state}")
+    except Exception as e:
+        print(f"[BUZZER ERROR] {e}")
+
 def shipment_log_view(request, contract_id):
     print(f"[LOG VIEW] Fetching logs for contract {contract_id}")
     
@@ -241,6 +272,7 @@ def shipment_log_view(request, contract_id):
 def fetch_adafruit_iot_data():
 
     try:
+        aio = get_aio_client()
         temp_feed = aio.receive(TEMP_FEED)
         temperature = float(temp_feed.value) if temp_feed and temp_feed.value is not None else None
 
@@ -496,7 +528,7 @@ def stream_contract_temperature(request, contract_id):
 
 				
 def _get_live_iot_data():
-  
+	aio= get_aio_client()
 	if aio is None:
 		print("AIO Client not initialized. Returning mock data.")
 		return -100.0, "N/A", "bg-secondary" 
@@ -861,6 +893,7 @@ def product_edit_view(request, pk):
 
 @login_required(login_url='login')
 def product_delete_view(request, pk):
+
 	product = get_object_or_404(Product, pk=pk, seller=request.user)
 	product.delete()
 	messages.success(request, "🗑️ Product deleted successfully.")
@@ -871,6 +904,7 @@ def fetch_adafruit_temp_for_live_display():
 	if cached: 
 		return cached
 	try:
+		aio = get_aio_client()
 		latest = aio.receive(TEMP_FEED)
 		val = float(latest.value)
 		cache.set("adafruit_temp", val, timeout=5)
@@ -1042,18 +1076,18 @@ def completed_view(request):
         if user_role == "buyer":
             contracts_queryset = Contract.objects.filter(
                 buyer_id=user_id,
-                status__in=['Completed', 'Refunded']
+                status__in=['Completed', 'Refunded', 'Denied']
             ).order_by('-contract_id')
 
         elif user_role == "seller":
             contracts_queryset = Contract.objects.filter(
                 seller_id=user_id,
-                status__in=['Completed', 'Refunded']
+                status__in=['Completed', 'Refunded', 'Denied']
             ).order_by('-contract_id')
 
         else:  # admin
             contracts_queryset = Contract.objects.filter(
-                status__in=['Completed', 'Refunded']
+                status__in=['Completed', 'Refunded', 'Denied']
             ).order_by('-contract_id')
 
     except Exception as e:
@@ -1075,8 +1109,19 @@ def completed_view(request):
         )
 
         refunded = contract_instance.status == 'Refunded'
-        status = 'Refunded' if refunded else 'Complete'
-        status_class = 'danger' if refunded else 'primary'
+        # status = 'Refunded' if refunded else 'Complete'
+        # status_class = 'danger' if refunded else 'primary'
+
+        if contract_instance.status == 'Refunded':
+            status = 'Refunded'
+            status_class = 'danger'	
+        elif contract_instance.status == 'Denied':
+            status = 'Denied'
+            status_class = 'warning'
+        else:
+            status = 'Complete'
+            status_class = 'primary'
+
 
         completed_contracts.append({
             'contract': contract_instance,
@@ -1166,9 +1211,9 @@ def alerts_view(request):
     alerts = alerts.order_by('-triggered_at')
 
     # ===== OPTIONAL CATEGORY FILTER =====
-    category = request.GET.get('category')
-    if category:
-        alerts = alerts.filter(category=category)
+    # category = request.GET.get('category')
+    # if category:
+    #     alerts = alerts.filter(category=category)
 
     return render(request, 'dashboard/alerts.html', {
         'alerts': alerts
