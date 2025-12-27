@@ -1,132 +1,94 @@
 from django.db import models
 from accounts.models import CustomUser
+from django.contrib.auth.models import User
+from django.utils import timezone
+from django.conf import settings
+
+
 
 class Contract(models.Model):
-    # Matches DB: SERIAL PRIMARY KEY -> IntegerField
-    contract_id = models.IntegerField(primary_key=True) 
-    buyer_address = models.CharField(max_length=42)
-    seller_address = models.CharField(max_length=42)
+    contract_id = models.AutoField(primary_key=True)
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL,
+                              related_name="contracts_bought",
+                              on_delete=models.CASCADE)
+
+    seller = models.ForeignKey(settings.AUTH_USER_MODEL,
+                               related_name="contracts_sold",
+                               on_delete=models.CASCADE)
+
+    buyer_address = models.CharField(max_length=100)
+    seller_address = models.CharField(max_length=100)
+
+    price = models.DecimalField(max_digits=12, decimal_places=4)
+    final_price  = models.DecimalField(max_digits=12, decimal_places=4)
+    min_temp = models.IntegerField()
+    max_temp = models.IntegerField()
+
+    temperature_time = models.IntegerField(
+        default=3,
+        help_text="Temperature breach duration (minutes) before refund"
+    )
+
+    product_name = models.CharField(max_length=100) 
+    quantity = models.IntegerField()
+
     IoT_Assigned = models.ForeignKey(
-        'IoTDevice', 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        'IoTDevice',
+        null=True,
         blank=True,
-        related_name='shipments',
+        on_delete=models.SET_NULL,
+        related_name='assigned_contract',
         db_column='IoT_Assigned'
     )
-    # Matches DB: VARCHAR(100)
-    product_name = models.CharField(max_length=100) 
-    # Matches DB: INT
-    quantity = models.IntegerField() 
-    # Matches DB: NUMERIC(12,2)
-    price = models.DecimalField(max_digits=12, decimal_places=2) 
-    
-    start_date = models.DateTimeField(auto_now_add=True)
-    end_date = models.DateTimeField(null=True, blank=True)  
-    
-    # Matches DB: VARCHAR(255). 42 is sufficient, but 255 is fine.
-    contract_address = models.CharField(max_length=42, default='NOT_DEPLOYED') 
-    
-    # NEW FIELD: Uses Django's JSONField, which maps to PostgreSQL's JSONB type
-    contract_abi = models.JSONField(default=dict)
 
-    min_temp = models.FloatField(default=2) # Or another suitable default
-    max_temp = models.FloatField(default=8) 
-    start_coord = models.CharField(max_length=50, null=True, blank=True) # Seller's location upon activation
-    end_coord = models.CharField(max_length=50, null=True, blank=True)   # Buyer's location upon creation
-    temperature_time = models.IntegerField(default=180)
-    location_time = models.IntegerField(default=180)
-    radius = models.FloatField(default=30)
-    # Matches DB: VARCHAR(50). Default should match your DB if possible, but 'active' works for filtering.
-    status = models.CharField(max_length=50,  choices=[
-        ('Active', 'Active'),
-        ('Completed', 'Completed'),
-        ('Pending', 'Pending'),
-        ('Ongoing', 'Ongoing'),
-        ('Refunded', 'Refunded'),
-    ], default='Pending') 
+    contract_address = models.CharField(max_length=200, null=True, blank=True)
+    contract_abi = models.TextField(null=True, blank=True)
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+    rejection_refund_reason = models.TextField(null=True, blank=True)
 
-    buyer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='buyer_contracts', null=True, blank=True)
-    seller = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='seller_contracts', null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('Pending', 'Pending'),
+            ('Active', 'Active'),
+            ('Ongoing', 'Ongoing'),
+            ('Completed', 'Completed'),
+            ('Refunded', 'Refunded'),
+        ],
+        default='Pending'
+    )
 
     class Meta:
-        # Crucial: Link to your existing Supabase table name
-        db_table = 'contracts' 
+        db_table = 'contracts'
         managed = False
 
     def __str__(self):
-        return f"{self.product_name} ({self.status})"
+        return f"Contract #{self.pk} | {self.status}"
+
 class ContractAddresses(models.Model):
     id = models.AutoField(primary_key=True)
     contract = models.OneToOneField('Contract', on_delete=models.CASCADE, related_name='address_record')
+
+    # TX hashes
     contract_address = models.CharField(max_length=42)
-    init_payment_add = models.CharField(max_length=255, null=True, blank=True)   # store init tx hash(es)
-    final_payment_add = models.CharField(max_length=255, null=True, blank=True)  # store final payout tx hash
+    contract_tx = models.CharField(max_length=255, null=True, blank=True)
+    escrow_init_tx = models.CharField(max_length=255, null=True, blank=True)
+    init_payment_add = models.CharField(max_length=255, null=True, blank=True)
+    final_payment_add = models.CharField(max_length=255, null=True, blank=True)
+    escrow_final_tx = models.CharField(max_length=255, null=True, blank=True)
+
+    # GAS INFO (json fields)
+    contract_gas = models.JSONField(null=True, blank=True)
+    escrow_init_gas = models.JSONField(null=True, blank=True)
+    init_payment_gas = models.JSONField(null=True, blank=True)
+    final_payment_gas = models.JSONField(null=True, blank=True)
+    escrow_final_gas = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = 'contract_addresses'
-class IoTDevice(models.Model):
-    device_id = models.AutoField(primary_key=True)
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='devices', null=True, blank=True)
-    device_name = models.CharField(max_length=255)
-    adafruit_feed = models.CharField(max_length=255)
-    status = models.CharField(max_length=50, default='Active')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'iot_devices'
         managed = False
-
-
-class IoTDataHistory(models.Model):
-    history_id = models.AutoField(primary_key=True)
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='iot_history', null=True, blank=True)
-    avg_temp = models.FloatField()
-    min_temp = models.FloatField()
-    max_temp = models.FloatField()
-    result = models.CharField(max_length=50, default='Normal')
-    recorded_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'iot_data_history'
-        managed = False
-
-
-class Alert(models.Model):
-    alert_id = models.AutoField(primary_key=True)
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, db_column='contract_id')
-    alert_type = models.CharField(max_length=50)
-    alert_message = models.TextField()
-    severity = models.CharField(max_length=20)
-    status = models.CharField(max_length=20)
-    triggered_at = models.DateTimeField()
-
-    class Meta:
-        db_table = 'alerts'
-        managed = False
-
-class IoTData(models.Model):
-    data_id = models.AutoField(primary_key=True)
-    device = models.ForeignKey(
-        'IoTDevice', 
-        on_delete=models.CASCADE, 
-        db_column='device_id',
-        related_name='iot_data'
-    )
-    temperature = models.FloatField(null=True, blank=True)
-    battery_voltage = models.FloatField(null=True, blank=True)
-    gps_lat = models.FloatField(null=True, blank=True)
-    gps_long = models.FloatField(null=True, blank=True)
-    recorded_at = models.DateTimeField(auto_now_add=True)
-    created_at = models.DateTimeField()
-
-    class Meta:
-        db_table = 'iot_data'
-        managed = False  # ✅ prevents Django from altering your real PostgreSQL table
-
-    def __str__(self):
-        return f"IoT Data #{self.data_id} - Device {self.device.device_id}"
-
+    
 class Product(models.Model):
     product_id = models.AutoField(primary_key=True)
     seller = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="products")
@@ -144,3 +106,94 @@ class Product(models.Model):
         managed = False  # Prevent Django from managing this table
     def __str__(self):
         return f"{self.product_name} ({self.seller.full_name})"
+
+
+
+
+class IoTDevice(models.Model):
+    device_id = models.AutoField(primary_key=True)
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name='devices',
+        null=True,
+        blank=True
+    )
+    device_name = models.CharField(max_length=255)
+    adafruit_feed = models.CharField(max_length=255, null=True, blank=True)
+    status = models.CharField(max_length=50, default='Available')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'iot_devices'
+        managed = False
+
+    def __str__(self):
+        return f"{self.device_name} ({self.status})"
+class Alert(models.Model):
+    ALERT_SEVERITY = (
+        ('Critical', 'Critical'),
+        ('Warning', 'Warning'),
+        ('Info', 'Info'),
+    )
+    alert_id = models.AutoField(primary_key=True)
+    contract = models.ForeignKey(Contract, null=True, blank=True, on_delete=models.SET_NULL)
+    device = models.ForeignKey(IoTDevice, null=True, blank=True, on_delete=models.SET_NULL)
+    alert_type = models.CharField(max_length=255)
+    alert_message = models.TextField()
+    severity = models.CharField(max_length=20, choices=ALERT_SEVERITY, default='Warning')
+    status = models.CharField(max_length=50, default='Active')
+    is_read = models.BooleanField(default=False)
+    category = models.CharField(max_length=50, default='System')
+    metadata = models.JSONField(default=dict, blank=True)  # Django 3.1+
+    triggered_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'alerts'
+        managed = False        
+class ShipmentLog(models.Model):
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE)
+    device = models.ForeignKey(IoTDevice, on_delete=models.CASCADE, null=True, blank=True)
+
+
+    log_time = models.DateTimeField(default=timezone.now)     # When the event happened
+    message = models.TextField()          # The summary text
+    log_type = models.CharField(max_length=50, default='System')
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        managed = False
+        db_table = "ShipmentLog"  # makes table name explicit
+        ordering = ["log_time"]
+class IoTData(models.Model):
+    data_id = models.AutoField(primary_key=True)
+    device = models.ForeignKey(IoTDevice, on_delete=models.CASCADE,
+                               db_column='device_id', related_name='iot_data')
+    temperature = models.FloatField(null=True, blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    contract = models.ForeignKey(
+        'Contract', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        db_column='contract_id' # Ensure this matches your DB column name
+    )
+    class Meta:
+        db_table = 'iot_data'
+        managed = False
+
+
+class IoTDataHistory(models.Model):
+    history_id = models.AutoField(primary_key=True)
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE,
+                                 related_name='iot_history', null=True, blank=True)
+    avg_temp = models.FloatField()
+    min_temp = models.FloatField()
+    max_temp = models.FloatField()
+    result = models.CharField(max_length=50, default='Normal')
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'iot_data_history'
+        managed = False
+

@@ -1,16 +1,8 @@
 from web3 import Web3
 import os
 
-# ⚠ Ganache RPC (current environment)
-GANACHE_RPC = "http://127.0.0.1:7545"
-
-# ⚠ Sepolia (future)
-# SEPOLIA_RPC = "https://sepolia.infura.io/v3/YOUR_INFURA_KEY"
-
-#w3 = Web3(Web3.HTTPProvider(SEPOLIA_RPC ))
-SEPOLIA_URL = os.getenv("TESTNET_RPC_URL")
-
-web3 = Web3(Web3.HTTPProvider(SEPOLIA_URL))
+GANACHE_RPC = "HTTP://127.0.0.1:7545"
+os.getenv("TESTNET_RPC_URL", "http://127.0.0.1:7545")
 
 def get_eth_balance(address):
     try:
