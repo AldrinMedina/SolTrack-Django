@@ -1,0 +1,45 @@
+<div class="modal-header">
+  <h5 class="modal-title">Activate Contract</h5>
+  <button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<form 
+    hx-post="{% url 'activate_contract' contract.contract_id %}" 
+    hx-target="#contract-{{ contract.contract_id }}" 
+    hx-swap="outerHTML"
+>
+    {% csrf_token %}
+  <div class="modal-body">
+    <p>Choose IoT device and enter your private key to activate this shipment.</p>
+
+    <div class="mb-2">
+      <label class="form-label">Select Device</label>
+      <select name="iot_device_select" class="form-control" required>
+        {% for dev in devices %}
+          {% if dev.status == "Available" %}
+            <option value="{{ dev.device_id }}">{{ dev.device_name }} (ID {{ dev.device_id }})</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label">Seller Private Key</label>
+      <input 
+        type="password" 
+        name="seller_private_key" 
+        class="form-control" 
+        placeholder="0x..." 
+        required
+      >
+      <small class="text-muted">
+        This is required to activate the smart contract.
+      </small>
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn btn-primary">Activate</button>
+  </div>
+</form>

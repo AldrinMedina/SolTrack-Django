@@ -1,0 +1,100 @@
+{% extends 'adminpanel/base_admin.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">Soltrack Admin Dashboard</h2>
+            <p class="text-muted">System-wide monitoring and analytics overview</p>
+        </div>
+        <div class="text-end">
+            <small class="text-muted">Last updated: <span id="lastUpdated">Just now</span></small>
+        </div>
+    </div>
+
+    <!-- Overview Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body text-center">
+                    <h6 class="fw-bold text-secondary mb-2">Total Contracts</h6>
+                    <div class="display-6 fw-bold text-primary">{{ total_contracts }}</div>
+                    <small class="text-muted">{{ active_contracts }} active, {{ completed_contracts }} completed</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body text-center">
+                    <h6 class="fw-bold text-secondary mb-2">Active Devices</h6>
+                    <div class="display-6 fw-bold text-success">{{ active_devices }}</div>
+                    <small class="text-muted">{{ total_devices }} total</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body text-center">
+                    <h6 class="fw-bold text-secondary mb-2">Average Temperature</h6>
+                    <div class="display-6 fw-bold {% if avg_temp > 8 %}text-danger{% else %}text-info{% endif %}">
+                        {{ avg_temp }}°C
+                    </div>
+                    <small class="text-muted">Across all shipments</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body text-center">
+                    <h6 class="fw-bold text-secondary mb-2">Active Alerts</h6>
+                    <div class="display-6 fw-bold text-warning">{{ alert_count }}</div>
+                    <small class="text-muted">{% if alert_count > 0 %}Requires attention{% else %}All clear{% endif %}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body">
+                    <h6 class="fw-bold text-dark mb-3">Contract Status Overview</h6>
+                    <canvas id="contractsChart" style="height: 300px; max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body">
+                    <h6 class="fw-bold text-dark mb-3">System Health</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            IoT Devices <span class="badge bg-success rounded-pill">{{ active_devices }}/{{ total_devices }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Active Contracts <span class="badge bg-primary rounded-pill">{{ active_contracts }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Alerts <span class="badge {% if alert_count > 0 %}bg-warning{% else %}bg-secondary{% endif %} rounded-pill">{{ alert_count }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+{{ active_contracts|json_script:"activeContracts" }}
+{{ completed_contracts|json_script:"completedContracts" }}
+{{ total_contracts|json_script:"totalContracts" }}
+
+{% endblock %}

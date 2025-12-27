@@ -1,0 +1,185 @@
+<style>
+/* Custom styling for section headers and address truncation */
+.details-section {
+    padding-bottom: 15px;
+}
+.details-section h6 {
+    font-weight: 600;
+    color: var(--bs-primary);
+    margin-top: 15px;
+    border-bottom: 2px solid #0d6efd; /* Use primary color border */
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+.truncated-address {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    font-family: monospace;
+    font-size: 0.9rem; /* Smaller font for addresses */
+}
+.detail-label {
+    font-weight: 500;
+    color: #6c757d; /* text-secondary */
+    font-size: 0.9rem; /* Unified font size for labels */
+}
+/* Ensure main content is using fs-5 or standard text size for unification */
+.modal-body .row > div > div:not(.detail-label, .text-break) {
+    font-size: 1rem; /* Standard body text size */
+}
+</style>
+
+<div class="modal-header d-flex justify-content-between align-items-center">
+    <div>
+        <h6 class="text-muted mb-0 me-3 d-inline-block">Contract ID: <span class="fw-bold text-dark">{{ contract.contract_id }}</span></h6>
+        <span class="badge fs-6 
+            {% if contract.status == 'Pending' %}bg-warning text-dark{% elif contract.status == 'Active' %}bg-success{% elif contract.status == 'Completed' %}bg-success{% elif contract.status == 'Refunded' %}bg-danger{% else %}bg-secondary{% endif %} d-inline-block">
+            Status: {{ contract.status }}
+        </span>
+    </div>
+    
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+
+<div class="modal-body">
+    
+    <div class="details-section">
+        <h6>Product & Specifications</h6>
+        <div class="row g-3">
+            <div class="col-md-4"><div class="detail-label">Product Name</div><div class="fw-bold">{{ contract.product_name }}</div></div>
+            <div class="col-md-2"><div class="detail-label">Quantity</div><div>{{ contract.quantity }}</div></div>
+            <div class="col-md-3"><div class="detail-label">Unit Price</div><div class="text-success">{{ contract.price|floatformat:4 }} ETH</div></div>
+            <div class="col-md-3"><div class="detail-label">Final Price</div><div class="text-success">{{ contract.final_price|floatformat:4 }} ETH</div></div>
+        </div>
+        <div class="row g-3 mt-3">
+            <div class="col-md-4"><div class="detail-label">Min Temperature Tolerable</div><div>{{ contract.min_temp }}°C</div></div>
+            <div class="col-md-4"><div class="detail-label">Max Temperature Tolerable</div><div>{{ contract.max_temp }}°C</div></div>
+            <div class="col-md-4"><div class="detail-label">Breach Window</div><div>{{ contract.temperature_time }} minutes</div></div>
+        </div>
+    </div>
+    
+    <div class="details-section">
+        <h6>Contracting Parties</h6>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <strong class="text-primary d-block mb-2">Buyer ({{ contract.buyer.full_name }})</strong>
+                <div class="detail-label">Organization</div><div>{{ contract.buyer.organization|default:"N/A" }}</div>
+                <div class="detail-label mt-2">Wallet Address</div>
+                <div class="text-break">
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.buyer_address }}', 'Buyer Wallet')">
+                        {{ contract.buyer_address|slice:":6" }}...{{ contract.buyer_address|slice:"-4:" }}
+                    </span>
+                </div>
+            </div>
+            {% if contract.status != 'Pending' %}
+            <div class="col-md-6 border-start">
+                <strong class="text-danger d-block mb-2">Seller ({{ contract.seller.full_name }})</strong>
+                <div class="detail-label">Organization</div><div>{{ contract.seller.organization|default:"N/A" }}</div>
+                <div class="detail-label mt-2">Wallet Address</div>
+                <div class="text-break">
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.seller_address }}', 'Seller Wallet')">
+                        {{ contract.seller_address|slice:":6" }}...{{ contract.seller_address|slice:"-4:" }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="details-section">
+        <h6>Deployment & Contract Life Cycle</h6>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="detail-label">Assigned IoT Device</div>
+                <div class="text-break">
+                    {% if contract.IoT_Assigned %}
+                        <span class="fw-bold text-success">{{ contract.IoT_Assigned.device_name }}</span>
+                    {% else %}
+                        <span class="fw-bold text-danger">Not Assigned Yet</span>
+                    {% endif %}
+                </div>
+            </div>
+             
+            <div class="col-md-5">
+                <div class="detail-label">Initial Contract Address</div>
+                <div class="text-break">
+                    {% if contract.address_record.contract_address %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.contract_address }}', 'Initial Smart Contract Address')">
+                        {{ contract.address_record.contract_address|slice:":6" }}...{{ contract.address_record.contract_address|slice:"-4:" }}
+                    </span>
+                    {% else %}
+                        N/A (Pending Deployment)
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="detail-label">Contract Deployment TX</div>
+                <div class="text-break">
+                    {% if contract.address_record.contract_tx %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.contract_tx }}', 'Contract Deployment Transaction Hash')">
+                        {{ contract.address_record.contract_tx|slice:":6" }}...{{ contract.address_record.contract_tx|slice:"-4:" }}
+                    </span>
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <h6 class="text-primary mt-4">Financial & Escrow Transactions</h6>
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="detail-label">Escrow Initialization TX</div>
+                <div class="text-break">
+                    {% if contract.address_record.escrow_init_tx %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.escrow_init_tx }}', 'Escrow Init TX')">
+                        {{ contract.address_record.escrow_init_tx|slice:":6" }}...{{ contract.address_record.escrow_init_tx|slice:"-4:" }}
+                    </span>
+                    {% else %} N/A {% endif %}
+                </div>
+            </div>
+             <div class="col-md-4">
+                <div class="detail-label">Initial Payment Address</div>
+                <div class="text-break">
+                    {% if contract.address_record.init_payment_add %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.init_payment_add }}', 'Initial Payment Address')">
+                        {{ contract.address_record.init_payment_add|slice:":6" }}...{{ contract.address_record.init_payment_add|slice:"-4:" }}
+                    </span>
+                    {% else %} N/A {% endif %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="detail-label">Final Payment Address</div>
+                <div class="text-break">
+                    {% if contract.address_record.final_payment_add %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.final_payment_add }}', 'Final Payment Address')">
+                        {{ contract.address_record.final_payment_add|slice:":6" }}...{{ contract.address_record.final_payment_add|slice:"-4:" }}
+                    </span>
+                    {% else %} N/A {% endif %}
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="detail-label">Escrow Finalization TX</div>
+                <div class="text-break">
+                    {% if contract.address_record.escrow_final_tx %}
+                    <span class="truncated-address" onclick="showFullAddress('{{ contract.address_record.escrow_final_tx }}', 'Escrow Finalization TX')">
+                        {{ contract.address_record.escrow_final_tx|slice:":6" }}...{{ contract.address_record.escrow_final_tx|slice:"-4:" }}
+                    </span>
+                    {% else %} N/A {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <p class="text-muted small mt-3">
+            *Gas information is available in the contract backend logs.
+        </p>
+
+    </div>
+<script>
+    function showFullAddress(fullAddress, label) {
+        // Use the browser's native alert for a simple pop-up
+        alert(label + ":\n\n" + fullAddress);
+    }
+</script>

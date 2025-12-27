@@ -1,0 +1,61 @@
+{# dashboard/partials/ongoing_list.html #}
+{% for contract in contracts %}
+  <div class="shipment-card" id="contract-{{ contract.contract_id }}">
+
+    <div class="d-flex justify-content-between">
+      <div>
+        <h5>{{ contract.product_name }} · {{ contract.quantity }}</h5>
+        <div>Buyer: {{ contract.buyer_address }}</div>
+        <div>Seller: {{ contract.seller_address }}</div>
+        <div>Status: <strong id="status-{{ contract.contract_id }}">{{ contract.status }}</strong></div>
+      </div>
+      <div class="text-end">
+        <div>Price: {{ contract.price }} ETH</div>
+        <div>Breach window: {{ contract.temperature_time }} min</div>
+      </div>
+    </div>
+
+    <!-- Live IoT block (polls every 3s) -->
+    <div class="mt-2"
+         id="live-iot-{{ contract.contract_id }}"
+         hx-get="{% url 'ajax_latest_iot' contract.contract_id %}"
+         hx-trigger="load, every 3s"
+         hx-swap="innerHTML">
+      Loading IoT...
+    </div>
+
+ 
+
+    <div class="mt-3 d-flex gap-2">
+		<button
+    class="btn btn-secondary"
+    hx-get="{% url 'shipment_logs' contract.contract_id %}"
+    hx-target="#modal-body-logs"
+    data-bs-toggle="modal"
+    data-bs-target="#logsModal">
+    View Logs
+  </button>
+		
+{% if contract.status == 'Active' and request.user.role == 'Buyer' %} 
+<button
+    class="btn btn-success"
+    hx-get="{% url 'contract_action_modal' contract.contract_id %}?action=complete"
+    hx-target="#modal-content"  data-bs-toggle="modal"
+    data-bs-target="#mainModal">
+    Complete
+</button>
+
+<button
+    class="btn btn-danger"
+    hx-get="{% url 'contract_action_modal' contract.contract_id %}?action=refund"
+    hx-target="#modal-content"
+    data-bs-toggle="modal"
+    data-bs-target="#mainModal">
+    Refund
+</button>
+{% endif %}
+    </div>
+  </div>
+{% empty %}
+  <div class="alert alert-secondary">No active shipments.</div>
+{% endfor %}

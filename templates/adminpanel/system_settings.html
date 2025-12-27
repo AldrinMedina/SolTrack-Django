@@ -1,0 +1,64 @@
+{% extends 'adminpanel/base_admin.html' %}
+{% block content %}
+<div class="container py-5">
+    <h3 class="fw-bold mb-4"><i class="bi bi-gear me-2"></i>System Settings</h3>
+    <div class="row g-4">
+        <!-- IoT & API Settings -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body">
+                    <h5 class="fw-semibold mb-3"><i class="bi bi-router me-2"></i>IoT & API Configuration</h5>
+                    <p class="text-muted small">Manage IoT credentials and Adafruit integration keys.</p>
+                    <button class="btn btn-outline-primary btn-sm">Edit API Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blockchain Settings -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body">
+                    <h5 class="fw-semibold mb-3"><i class="bi bi-link-45deg me-2"></i>Blockchain Settings</h5>
+                    <p class="text-muted small">RPC URLs, Chainlink keys, and deployment configurations.</p>
+                    <button class="btn btn-outline-primary btn-sm">Configure Blockchain</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body">
+                    <h5 class="fw-semibold mb-3"><i class="bi bi-bell me-2"></i>Notifications</h5>
+                    <p class="text-muted small">Enable or disable system alerts and email notifications.</p>
+                    <button class="btn btn-outline-primary btn-sm">Manage Alerts</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Role & Access Control -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body">
+                    <h5 class="fw-semibold mb-3"><i class="bi bi-people me-2"></i>Role Management</h5>
+                    <p class="text-muted small">Assign roles or approve new users for the platform.</p>
+                    <button class="btn btn-outline-primary btn-sm">Manage Roles</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Control -->
+        <div class="col-md-12">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body text-center">
+                    <h5 class="fw-semibold mb-3"><i class="bi bi-trash3 me-2"></i>Data Cleanup</h5>
+                    <p class="text-muted small">Reset test data or clear inactive records from the database.</p>
+                    <button class="btn btn-outline-danger btn-sm" onclick="confirm('Are you sure? This action cannot be undone.')">
+                        Clear Test Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

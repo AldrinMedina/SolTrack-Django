@@ -1,0 +1,17 @@
+{# templates/dashboard/partials/badge_counts.html #}
+
+<span class="badge bg-success ms-auto" id="activeBadge" hx-swap-oob="outerHTML">
+    {{ active_count }}
+</span>
+
+<span class="badge bg-warning ms-auto" id="ongoingBadge" hx-swap-oob="outerHTML">
+    {{ ongoing_count }}
+</span>
+
+<span class="badge bg-primary ms-auto" id="completedBadge" hx-swap-oob="outerHTML">
+    {{ completed_count }}
+</span>
+
+<span class="badge bg-danger ms-auto" id="alertsBadge" hx-swap-oob="outerHTML">
+    {{ alerts_count }}
+</span>
