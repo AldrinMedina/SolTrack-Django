@@ -1,0 +1,77 @@
+{# dashboard/partials/completed_list.html #}
+{% for contract in contracts %}
+  <div class="completed-card p-3 shadow-sm mb-3">
+    
+    <div class="row align-items-center g-3">
+
+        <div class="col-md-3 border-end text-center">
+            <h6 class="text-muted mb-1 fw-normal">Contract ID</h6>
+            <span class="fs-5 fw-bold text-dark d-block mb-2">{{ contract.contract_id }}</span>
+            
+            <h6 class="text-muted mb-1 fw-normal">Status</h6>
+            <span class="badge fs-6 
+                {% if contract.status == 'Completed' %}bg-success{% elif contract.status == 'Refunded' %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ contract.status }}
+            </span>
+        </div>
+
+        <div class="col-md-5 py-2 border-end">
+            <div class="row g-2 text-center">
+                
+                <div class="col-6">
+                    <h6 class="text-muted small mb-1 fw-normal">Buyer Wallet Address</h6>
+                    <span class="d-block fw-bold text-primary truncated-address" 
+                        onclick="showFullAddress('{{ contract.buyer_address }}', 'Buyer Wallet')">
+                        {{ contract.buyer_address|slice:":6" }}...{{ contract.buyer_address|slice:"-4:" }}
+                    </span>
+                    <p class="text-muted small mb-0 mt-1">
+                        ({{ contract.buyer.organization|default:"N/A" }})
+                    </p>
+                </div>
+                
+                <div class="col-6">
+                    <h6 class="text-muted small mb-1 fw-normal">Seller Wallet Address</h6>
+                    <span class="d-block fw-bold text-secondary truncated-address" 
+                        onclick="showFullAddress('{{ contract.seller_address }}', 'Seller Wallet')">
+                        {{ contract.seller_address|slice:":6" }}...{{ contract.seller_address|slice:"-4:" }}
+                    </span>
+                    <p class="text-muted small mb-0 mt-1">
+                        ({{ contract.seller.organization|default:"N/A" }})
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 d-flex flex-column align-items-center justify-content-center gap-2">
+            
+            <a class="btn btn-sm btn-outline-dark fs-6 w-100" 
+               href="{% url 'download_logs' contract.contract_id %}">
+                <i class="bi bi-filetype-pdf me-1"></i> Download Logs
+            </a>
+            
+            <a class="btn btn-sm btn-outline-primary fs-6 w-100" 
+               href="{% url 'download_contract_report' contract.contract_id %}">
+                <i class="bi bi-download me-1"></i> Final Report
+            </a>
+            
+            <button
+                class="btn btn-sm btn-outline-info fs-6 w-100"
+                hx-get="{% url 'contract_details_modal' contract.contract_id %}"
+                hx-target="#modal-body-details"
+                data-bs-toggle="modal"
+                data-bs-target="#detailsModal">
+                Details
+            </button>
+        </div>
+        
+    </div>
+  </div>
+{% empty %}
+  <div class="alert alert-secondary text-center">No completed or refunded shipments.</div>
+{% endfor %}
+
+<script>
+    function showFullAddress(fullAddress, label) {
+        alert(label + ":\n\n" + fullAddress);
+    }
+</script>

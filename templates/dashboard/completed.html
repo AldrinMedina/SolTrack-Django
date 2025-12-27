@@ -1,105 +1,21 @@
-{% extends 'base.html' %}
-{% load static %}
-
+{% extends "base.html" %}
 {% block content %}
-<div id="completed-content" class="tab-content">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="fw-bold text-white mb-2">Completed Contracts</h2>
-            <p class="text-white opacity-75">Successfully delivered shipments, awaiting final settlement.</p>
-        </div>
-    </div>
 
-    <div class="row">
-        <div class="col-12">
-            {% if contracts %}
-            <div class="table-responsive" style="max-width: 100%; overflow-x: auto;">
-                <table class="table table-hover align-middle" style="background-color: white; border-radius: 8px; overflow: hidden; ">
-                    <thead style="background-color: #f8f9fa;">
-                        <tr>
-                            <th class="px-3 py-3" style="min-width: 100px;">Contract ID</th>
-                            <th class="px-3 py-3" style="min-width: 140px;">Status</th>
-                            <th class="px-3 py-3" style="min-width: 130px;">Product Name</th>
-                            <th class="px-3 py-3" style="min-width: 120px;">Buyer</th>
-                            <th class="px-3 py-3" style="min-width: 120px;">Seller</th>
-                            <th class="px-3 py-3" style="min-width: 150px;">Contract Address</th>
-                            <th class="px-3 py-3" style="min-width: 100px;">Final Temp</th>
-                            <th class="px-3 py-3" style="min-width: 90px;">Quantity</th>
-                            <th class="px-3 py-3" style="min-width: 110px;">Payment (ETH)</th>
-                            <th class="px-3 py-3" >Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in contracts %}
-                        {% with contract=item.contract status_class=item.status_class %}
-                        <tr>
-                            <td class="px-3 py-3">
-                                <span class="fw-bold text-dark">#{{ contract.contract_id }}</span>
-                            </td>
-                            <td class="px-3 py-3">
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-{{ status_class }} px-3 py-2 rounded-pill">{{ item.status }}</span>
-                                    {% if item.refunded %}
-										<i class="bi bi-x-circle-fill text-danger"></i>
-									{% else %}
-										<i class="bi bi-check-circle-fill text-primary"></i>
-									{% endif %}
-                                </div>
-                            </td>
-                            <td class="px-3 py-3">
-                                <span class="fw-bold text-dark">{{ contract.product_name }}</span>
-                            </td>
-                            <td class="px-3 py-3">
-                                <div>
-                                    <div class="fw-semibold text-dark">{{ item.buyer_name|default:"N/A"|truncatechars:10 }}</div>
-                                </div>
-                            </td>
-                            <td class="px-3 py-3">
-                                <div>
-                                    <div class="fw-semibold text-dark">{{ item.seller_name|default:"N/A"|truncatechars:10 }}</div>
-                                </div>
-                            </td>
-                            <td class="px-3 py-3">
-                                {% if contract.contract_address and contract.contract_address != '0x' %}
-                                    <code class="text-truncate d-block fw-semibold text-dark" style="font-size: 0.8rem; max-width: 130px;">
-                                        {{ contract.contract_address|truncatechars:18 }}
-                                    </code>
-                                {% else %}
-                                    <span class="text-danger fw-semibold" style="font-size: 0.8rem;">Not Deployed</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-3 py-3">
-                                <span class="fs-5 fw-bold text-primary">{{ item.current_temp }}</span>
-                            </td>
-                            <td class="px-3 py-3">
-                                <span class="text-dark">{{ contract.quantity|default:"N/A" }}</span>
-                            </td>
-                            <td class="px-3 py-3">
-                                <span class="fw-semibold text-dark">{{ contract.price|default:"N/A" }}</span>
-                            </td>
-                            <td class="px-3 py-3">
-                                <div class="d-flex gap-1 flex-nowrap">
-                                    <a href="{% url 'download_contract_report' contract.contract_id %}"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        title="Download report">
-                                        <i class="bi bi-download"></i>
-                                    </a>
+<h2>Completed & Refunded Shipments</h2>
 
-                                </div>
-                            </td>
-                        </tr>
-                        {% endwith %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="alert alert-info" role="alert">
-                <i class="bi bi-info-circle me-2"></i>
-                No completed contracts found in the database.
-            </div>
-            {% endif %}
-        </div>
+<div id="completed-list"
+     hx-get="{% url 'completed_view' %}"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <!-- Server will render partial completed_list.html -->
+</div>
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg"> 
+    <div class="modal-content">
+      <div class="modal-body" id="modal-body-details">
+        Loading details...
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}

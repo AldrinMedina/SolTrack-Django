@@ -22,19 +22,7 @@
 
     <!-- Key Metrics -->
     <div class="row g-3 mb-4">
-        <!-- Average Temperature -->
-        <div class="col-xl-4 col-md-6">
-            <div class="metric-card text-center">
-                <div class="temp-gauge mx-auto mb-3">
-                    <div class="temp-value" id="avgTemp">{{ avg_temp }}°C</div>
-                </div>
-                <h6 class="fw-bold text-dark mb-1">Avg Temperature</h6>
-                <span class="badge {% if avg_temp > -1 and avg_temp < 8 %}status-normal{% else %}status-warning{% endif %} px-3 py-2 rounded-pill">
-                    <i class="bi bi-check-circle me-1"></i>
-                    {% if avg_temp > -1 and avg_temp < 8 %}Normal{% else %}Warning{% endif %}
-                </span>
-            </div>
-        </div>
+       
 
         <div class="col-xl-4 col-md-6">
             <div class="metric-card text-center">
@@ -45,14 +33,7 @@
             </div>
         </div>
 
-        <!-- Success Rate -->
-        <!-- <div class="col-xl-3 col-md-6">
-            <div class="metric-card text-center">
-                <div class="display-6 text-success fw-bold mb-2">{{ success_rate }}%</div>
-                <h6 class="fw-bold text-dark mb-1">Success Rate</h6>
-                <small class="text-muted">Within temperature range</small>
-            </div>
-        </div> -->
+    
 
         <!-- Active Alerts -->
         <div class="col-xl-4 col-md-6">

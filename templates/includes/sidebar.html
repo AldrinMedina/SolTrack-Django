@@ -13,6 +13,11 @@
         </small>
     {% endif %}
 </div>
+<div id="badge-updater"
+            hx-get="{% url 'badge_counts' %}" 
+            hx-trigger="load, every 30s" 
+            hx-swap="none">
+             </div>
 <nav class="nav flex-column">
     <a href="{% url 'overview' %}" class="nav-link nav-link-custom">
         <i class="bi bi-house me-2"></i>Overview
@@ -29,17 +34,16 @@
         <i class="bi bi-check-circle me-2"></i>Completed
         <span class="badge bg-primary ms-auto" id="completedBadge">0</span>
     </a>
-    <a href="{% url 'alerts' %}" class="nav-link nav-link-custom">
+    <a href="{% url 'alerts_view' %}" class="nav-link nav-link-custom">
         <i class="bi bi-exclamation-triangle me-2"></i>Alerts
         <span class="badge bg-danger ms-auto" id="alertsBadge">0</span>
     </a>
-
-            {% if user.role|lower == "seller" %}
-            <a href="{% url 'product_manager' %}" class="nav-link nav-link-custom mt-2">
-                <i class="bi bi-box-seam me-2"></i>Product Manager
-            </a>
-            {% endif %}
-        </nav>
+    {% if user.role|lower == "seller" %}
+    <a href="{% url 'product_manager' %}" class="nav-link nav-link-custom mt-2">
+        <i class="bi bi-box-seam me-2"></i>Product Manager
+    </a>
+    {% endif %}
+</nav>
     </div>
 
     <div class="p-4 mt-auto">

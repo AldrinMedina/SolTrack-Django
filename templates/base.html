@@ -1,104 +1,297 @@
-{% include 'includes/header.html' %}
+{% load static %}
 
-{% block content %}
-<div class="position-fixed bottom-0 end-0 p-3">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ColdChain Dashboard</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/hyperscript.org@0.9.7"></script>
+
+    <style>
+        body { background: #f6f6f6; }
+        .page-container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        /* Toast container */
+        #toast-container {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            z-index: 99999;
+        }
+
+        /* Contract Cards */
+        .contract-card, .shipment-card, .completed-card {
+            background: white;
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #e1e1e1;
+        }
+
+        .iot-box {
+            background: #ececec;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .shipment-log-list {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .btn-primary, .btn-danger {
+            min-width: 120px;
+        }
+    </style>
+
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+
+    {% include "includes/header.html" %}
+
+    <div class="page-container">
+        {% block content %}
+        {% endblock %}
+    </div>
+
+    <!-- Toast Container -->
     <div id="toast-container"></div>
-</div>
 
-{% endblock %}
+    <!-- Bootstrap Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-    const DASHBOARD_DATA_URL = "{% url 'dashboard_data' %}";
-    const ONGOING_DATA_URL = "{% url 'ongoing_data_json' %}";
-    const SHIPMENT_DETAILS_URL = "{% url 'shipment_details' contract_id=0 %}";
-    
-        function showContractToast(title, message, level="info") {
-    const container = document.getElementById("toast-container");
-
-    const colors = {
-        success: "bg-success text-white",
-        error: "bg-danger text-white",
-        info: "bg-primary text-white"
-    };
-
-    const toast = document.createElement("div");
-    toast.className = "toast " + (colors[level] || colors.info);
-    toast.role = "alert";
-
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <strong>${title}</strong><br>${message}
+    <!-- MainModal for HTMX-loaded modals -->
+    <div class="modal fade" id="mainModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content" id="modal-body">
+                <!-- HTMX loads modal content here -->
             </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
-    `;
+    </div>
+<meta name="csrf-token" content="{{ csrf_token }}">
+<script>
+let retrievedValue = sessionStorage.getItem('m_address');
+    console.log(retrievedValue); 
+document.body.addEventListener("htmx:configRequest", (event) => {
+    const token = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    if (token) event.detail.headers['X-CSRFToken'] = token;
+});	
+	
+document.body.addEventListener("htmx:afterSwap", function (evt) {
 
-    container.appendChild(toast);
+    // Only run for modal content
+    if (evt.detail.target.id !== "modal-body") return;
 
-    new bootstrap.Toast(toast, { delay: 5000 }).show();
-}
-function pollUpdates() {
-    fetch("/dashboard/poll-updates/")
+    console.log("Modal loaded — binding ALL modal JS");
+
+    const modal = evt.detail.target;
+
+    // Select elements inside modal ONLY
+    const sellerSelect  = modal.querySelector("[name='seller']");
+    const productSelect = modal.querySelector("[name='product_id']");
+    const qtyInput      = modal.querySelector("[name='quantity']");
+    const prodName      = modal.querySelector("[name='product_name']");
+    const prodPrice     = modal.querySelector("[name='price']");
+    const minTemp       = modal.querySelector("[name='min_temp']");
+    const maxTemp       = modal.querySelector("[name='max_temp']");
+    const tempTime      = modal.querySelector("[name='temperature_time']");
+    const stockLabel    = modal.querySelector("#stockLabel");
+    const price =         modal.querySelector("[name='Price']");
+    const finalPrice    = modal.querySelector("#finalPrice");
+
+    console.log("FOUND ELEMENTS:", {
+        sellerSelect,
+        productSelect,
+        qtyInput,
+        prodName,
+        prodPrice,
+        minTemp,
+        maxTemp,
+        tempTime
+    });
+
+    // Abort if seller dropdown missing
+    if (!sellerSelect) {
+        console.warn("Seller select not found — abort JS init.");
+        return;
+    }
+
+    // 1) SELLER SELECT → LOAD PRODUCTS
+sellerSelect.addEventListener("change", function () {
+    console.log("Seller changed!");
+    const sellerId = this.value;
+
+    fetch(`/dashboard/get-products/${sellerId}/`)
         .then(r => r.json())
         .then(data => {
-            (data.events || []).forEach(evt => {
-                if (evt.event === "refunded") {
-                    showContractToast(
-                        "Shipment Refunded",
-                        "Contract " + evt.id + " was automatically refunded.",
-                        "error"
-                    );
+            console.log("Products loaded:", data.products);
 
-                    // Optional: auto-refresh UI
-                    setTimeout(() => location.reload(), 2000);
-                }
+            // --- NEW: Autofill seller address ---
+            document.getElementById("sellerAddress").value = data.seller_address;
 
-                if (evt.event === "completed") {
-                    showContractToast(
-                        "Shipment Completed",
-                        "Contract " + evt.id + " arrived successfully.",
-                        "success"
-                    );
+            productSelect.innerHTML = "";
+            productSelect.disabled = false;
 
-                    // Optional: auto-refresh UI
-                    setTimeout(() => location.reload(), 2000);
-                }
+            productSelect.innerHTML = `<option disabled selected>Select a product</option>`;
+
+            data.products.forEach(p => {
+                productSelect.innerHTML += `
+                    <option value="${p.product_id}"
+                        data-name="${p.product_name}"
+                        data-price="${p.price_eth}"
+                        data-min="${p.min_temp}"
+                        data-max="${p.max_temp}"
+                        data-temp="${p.temp_time_range}"
+                        data-stock="${p.quantity_available}">
+                        ${p.product_name}
+                    </option>
+                `;
             });
-        })
-        .catch(err => console.error(err));
-}
+        });
+});
 
-setInterval(pollUpdates, 10000);
+    // 2) PRODUCT SELECT → AUTOFILL FIELDS
+    productSelect.addEventListener("change", function () {
+        const selected = this.options[this.selectedIndex];
+        console.log("PRODUCT SELECTED:", selected.dataset);
 
-contractSource.onmessage = function(event) {
-    try {
-        const data = JSON.parse(event.data);
-        showContractToast(data.event, data.contract_id);
-    } catch (e) {
-        console.error("Event parse error:", e);
+        prodName.value = selected.dataset.name;
+        prodPrice.value = selected.dataset.price;
+        minTemp.value  = selected.dataset.min;
+        maxTemp.value  = selected.dataset.max;
+        tempTime.value = selected.dataset.temp;
+
+        const stock = selected.dataset.stock;
+        qtyInput.disabled = false;
+        qtyInput.max = stock;
+        qtyInput.value = "";
+
+        stockLabel.classList.remove("d-none");
+        stockLabel.textContent = `Available stock: ${stock}`;
+
+        finalPrice.value = "";
+    });
+
+    // 3) QUANTITY → FINAL PRICE CALC
+qtyInput.addEventListener("input", function () {
+    const q = parseInt(this.value);
+    const unitPrice = parseFloat(prodPrice.value); // price per unit
+    const serviceFee = 5;
+
+    if (!q || q < 1) {
+        finalPrice.value = "";
+        Price.value = "";
+        finalPriceHidden.value = "";
+        return;
     }
-};
 
-setInterval(pollNotifications, 10000);
+    if (q > parseInt(qtyInput.max)) {
+        this.value = qtyInput.max;
+    }
+
+    const basePrice = unitPrice * this.value;  // price * quantity
+    const total = basePrice + serviceFee;
+
+    // Show values in UI
+    finalPrice.value = total.toFixed(6);
+
+    // Save values for backend
+    Price.value = basePrice.toFixed(6);
+    finalPriceHidden.value = total.toFixed(6);
+});
+
+});
+function pushToast(message, level = 'info') {
+        const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) return;
+
+        // Map level to Bootstrap class
+        let bgClass = 'text-bg-primary';
+        let icon = 'bi-info-circle-fill';
+        if (level === 'success') { bgClass = 'text-bg-success'; icon = 'bi-check-circle-fill'; }
+        else if (level === 'error' || level === 'critical') { bgClass = 'text-bg-danger'; icon = 'bi-exclamation-triangle-fill'; }
+        else if (level === 'warning') { bgClass = 'text-bg-warning'; icon = 'bi-exclamation-circle-fill'; }
+        
+        const toastHtml = `
+            <div class="toast align-items-center ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center">
+                        <i class="bi ${icon} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = toastHtml;
+        const toastElement = wrapper.firstChild;
+        toastContainer.appendChild(toastElement);
+
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+        
+        // Clean up the DOM after the toast fades
+        toastElement.addEventListener('hidden.bs.toast', () => {
+            toastElement.remove();
+        });
+    }
+        document.addEventListener('htmx:responseHeaders', function(evt) {
+    const toastMessage = evt.detail.headers['HX-Toast'];
+    // You could also send HX-Toast-Level from the server if needed, defaulting to 'info'
+    const toastLevel = evt.detail.headers['HX-Toast-Level'] || 'info'; 
+    
+    if (toastMessage) {
+        // Calls your existing pushToast function
+        pushToast(toastMessage, toastLevel.toLowerCase());
+    }
+});
+document.addEventListener('htmx:afterSwap', function(event) {
+        const mainModal = document.getElementById('mainModal');
+        if (event.detail.target && event.detail.target.id === 'mainModal' && mainModal) {
+            // Check if the response requested to close the modal
+            const hxTrigger = event.detail.request.getResponseHeader('HX-Trigger');
+            if (hxTrigger && hxTrigger.includes('closeModal')) {
+                const modalInstance = bootstrap.Modal.getInstance(mainModal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+        }
+    });
+     document.body.addEventListener("htmx:configRequest", (event) => {
+    event.detail.headers["X-CSRFToken"] =
+      document.querySelector('meta[name="csrf-token"]').content;
+  });
+document.addEventListener('closeModal', function(evt) {
+        // Target the main modal element
+        const modalElement = document.getElementById('mainModal'); 
+        
+        if (modalElement) {
+            // Get the Bootstrap instance and hide it
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            }
+        }
+    });
+        // HTMX event listener for success
+        document.body.addEventListen
 
 </script>
-<style>
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.4; }
-  100% { opacity: 1; }
-}
-
-.text-loading {
-  color: #888;
-  animation: pulse 1.2s infinite ease-in-out;
-}
-.live-temp-updated {
-  transition: color 0.4s ease, opacity 0.4s ease;
-}
-</style>
-
-{% block extra_js %}{% endblock %}
-
-{% include 'includes/footer.html' %}

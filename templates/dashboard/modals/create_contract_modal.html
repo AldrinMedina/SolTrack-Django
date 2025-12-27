@@ -1,0 +1,121 @@
+<div class="modal-header">
+    <h5 class="modal-title">Create Contract</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+
+<form id="createContractForm"
+      hx-post="{% url 'create_contract_view' %}"
+      hx-target="#active-list"
+      hx-swap="innerHTML"
+      class="p-2">
+{% csrf_token %}
+    <!-- Hidden product name (used for the POST) -->
+    <input type="hidden" id="productName" name="product_name">
+
+
+    <div class="mb-3">
+        <label class="form-label">Buyer Address</label>
+       <input type="text"
+       class="form-control"
+       name="buyer_address"
+       value="{{ buyer_address }}"
+       readonly>
+    </div>
+<div class="mb-3">
+    <label class="form-label">Seller Address</label>
+    <input type="text" class="form-control" id="sellerAddress" name="seller_address" readonly required>
+</div>
+
+    <div class="mb-3">
+        <label class="form-label">Select Seller</label>
+        <select id="sellerSelect" name="seller" class="form-select" required>
+            <option value="" disabled selected>Select seller</option>
+            {% for s in sellers %}
+                <option value="{{ s.user_id }}">{{ s.full_name }} ({{ s.email }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Select Product</label>
+        <select id="productSelect" name="product_id" class="form-select" disabled required>
+            <option disabled selected>Select a seller first</option>
+        </select>
+    </div>
+
+    <!-- Price (auto-filled ETH per unit) -->
+    <div class="mb-3">
+        <label class="form-label">Price (ETH per unit)</label>
+        <input type="text" id="priceEth" class="form-control" name="price" readonly>
+    </div>
+
+    <!-- Quantity -->
+    <div class="mb-3">
+        <label class="form-label">Quantity</label>
+        <input type="number"
+               id="quantity"
+               name="quantity"
+               class="form-control"
+               min="1"
+               disabled
+               required>
+        <small id="stockLabel" class="text-muted d-none"></small>
+    </div>
+
+    <!-- Final Price -->
+    <div class="mb-3">
+        <label class="form-label fw-bold">Final Price (ETH)</label>
+        <input type="text" class="form-control fw-bold" id="finalPrice" readonly>
+    </div>
+            <input type="text" class="form-control fw-bold" id="Price" name = "Price"readonly hidden>
+
+<div class="mb-3">
+    <label class="form-label">Service Charge (fixed)</label>
+    <input type="text" class="form-control" id="serviceCharge" name="serviceCharge" value="5" readonly>
+    <small class="text-muted">A fixed service fee of 5 ETH will be added to the total price.</small>
+</div>
+
+    <!-- Temperature Limits (auto-filled) -->
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Min Temperature</label>
+            <input type="text" id="minTemp" name="min_temp" class="form-control" readonly>
+        </div>
+
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Max Temperature</label>
+            <input type="text" id="maxTemp" name="max_temp" class="form-control" readonly>
+        </div>
+    </div>
+
+    <!-- Hidden temperature_time (auto-filled from product) -->
+    <input type="hidden" id="tempTimeRange" name="temperature_time">
+<input type="hidden" id="finalPriceHidden" name="final_price">
+    <div class="text-end">
+        <button type="submit" class="btn btn-primary">Create Contract</button>
+    </div>
+
+</form>
+
+</div>
+
+<script>
+document.addEventListener('closeModal', function(evt) {
+        // Find the closest Bootstrap modal element that contains the form.
+        const modalElement = document.getElementById('createContractForm').closest('.modal');
+
+        if (modalElement) {
+            // Use the Bootstrap JavaScript API to hide the modal.
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            }
+            
+            // If the modal was loaded via HTMX, sometimes removing the element helps.
+            // modalElement.remove(); 
+        }
+    });
+
+</script>

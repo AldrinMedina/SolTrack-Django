@@ -1,0 +1,18 @@
+{# templates/dashboard/partials/iot_box.html #}
+{% if device %}
+  <div>
+    <div><strong>Device:</strong> {{ device.device_id }}</div>
+    <div><strong>Temp:</strong> {% if temp is not None %}{{ temp }} °C{% else %}N/A{% endif %}</div>
+    <div><strong>Last:</strong> {{ timestamp }}</div>
+
+    {% if temp is not None %}
+      {% if temp < contract.min_temp or temp > contract.max_temp %}
+        <div class="text-danger">Out of range</div>
+      {% else %}
+        <div class="text-success">Within range</div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% else %}
+  <div>No device assigned.</div>
+{% endif %}

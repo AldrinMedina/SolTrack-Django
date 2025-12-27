@@ -1,0 +1,26 @@
+<div class="modal-header">
+  <h5 class="modal-title">
+    {% if action == "complete" %}Complete Shipment{% else %}Refund Shipment{% endif %}
+  </h5>
+  <button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<form hx-post="{% url 'process_contract_action' contract.contract_id %}" hx-target="#contract-{{ contract.contract_id }}" hx-swap="outerHTML">
+ {% csrf_token %}
+  <div class="modal-body">
+    {% if action == "complete" %}
+      <p>Are you sure you want to mark this shipment as <strong>Completed</strong>?</p>
+    {% else %}
+      <p>Are you sure you want to <strong>refund</strong> this shipment? This will send funds back to the buyer.</p>
+    {% endif %}
+
+    <input type="hidden" name="action" value="{{ action }}">
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn {% if action == 'refund' %}btn-danger{% else %}btn-success{% endif %}">
+      {% if action == "complete" %}Confirm Complete{% else %}Confirm Refund{% endif %}
+    </button>
+  </div>
+</form>

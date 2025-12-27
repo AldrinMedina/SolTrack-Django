@@ -1,0 +1,46 @@
+<div class="modal-header">
+    <h5 class="modal-title text-danger">Request Refund</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<form
+    hx-post="{% url 'manual_refund_contract' contract.contract_id %}"
+    hx-target="#contract-{{ contract.contract_id }}"
+    hx-swap="outerHTML"
+    method="POST"
+>
+    {% csrf_token %}
+    <div class="modal-body">
+        <p class="text-muted small">Please select the reason for requesting a refund.</p>
+
+        <label class="form-label">Reason</label>
+        <select
+            class="form-select mb-3"
+            name="reason_code"
+            id="refundReason"
+            required
+            hx-on="change:
+                this.value === 'other'
+                ? document.getElementById('otherReason').classList.remove('d-none')
+                : document.getElementById('otherReason').classList.add('d-none')
+            "
+        >
+            <option value="">Select reason</option>
+            <option value="broken_items">Broken Items</option>
+            <option value="wrong_items">Wrong Items</option>
+            <option value="other">Other</option>
+        </select>
+
+        <textarea
+            class="form-control d-none"
+            id="otherReason"
+            name="reason_text"
+            placeholder="Provide additional details"
+        ></textarea>
+    </div>
+
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Confirm Refund</button>
+    </div>
+</form>

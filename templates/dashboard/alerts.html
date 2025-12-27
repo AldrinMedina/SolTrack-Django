@@ -38,23 +38,27 @@
                     <h5 class="alert-heading mb-1">{{ alert.alert_type }}</h5>
                     <p class="mb-1">{{ alert.alert_message }}</p>
                     <small class="opacity-75">
-                        Device: {{ alert.device.device_name }} |
-                        Contract ID: {{ alert.device.contract.contract_id }} |
+                        Contract ID: 
+                        {% if alert.contract %}
+                            {{ alert.contract.contract_id }} 
+                        {% else %}
+                            N/A
+                        {% endif %}
+                        |
+                        
+                        Device: 
+                        {% if alert.device %}
+                            {{ alert.device.device_name }} 
+                        {% else %}
+                            N/A
+                        {% endif %}
+                        |
+                        
                         {{ alert.triggered_at|date:"M d, Y H:i" }}
                     </small>
                 </div>
 
-                <div class="ms-3">
-                    {% if alert.severity == 'Critical' %}
-                        <button class="btn btn-danger btn-sm">
-                            <i class="bi bi-telephone"></i> Call
-                        </button>
-                    {% elif alert.severity == 'Warning' %}
-                        <button class="btn btn-warning btn-sm">
-                            <i class="bi bi-tools"></i> Check
-                        </button>
-                    {% endif %}
-                </div>
+                
             </div>
         </div>
         {% empty %}

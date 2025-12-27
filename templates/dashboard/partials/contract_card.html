@@ -1,0 +1,79 @@
+{# templates/dashboard/partials/contract_card.html #}
+<div class="contract-card p-3 shadow-sm mb-3" id="contract-{{ contract.contract_id }}">
+  <div class="row align-items-center g-3">
+
+    <div class="col-md-2 border-end text-center">
+      <h6 class="text-muted mb-1 fw-normal">Status</h6>
+      <span class="badge fs-6 
+        {% if contract.status == 'Pending' %}bg-warning text-dark
+        {% elif contract.status == 'Active' %}bg-success
+        {% elif contract.status == 'Rejected' %}bg-danger
+        {% else %}bg-secondary{% endif %}">
+        {{ contract.status }}
+      </span>
+    </div>
+
+    <div class="col-md-7 py-2 border-end">
+      <div class="row g-2 text-center align-items-center">
+          <div class="col-3">
+              <h6 class="text-muted small mb-1 fw-normal">Contract ID</h6>
+              <span class="d-block fw-bold text-dark">{{ contract.contract_id }}</span>
+          </div>
+          <div class="col-3">
+              <h6 class="text-muted small mb-1 fw-normal">Product</h6>
+              <span class="d-block fw-bold text-primary">{{ contract.product_name }}</span>
+          </div>
+          <div class="col-3">
+              <h6 class="text-muted small mb-1 fw-normal">Qty / Price</h6>
+              <span class="d-block fw-bold" style="font-size: 0.9rem;">{{ contract.quantity }} units</span>
+              <span class="text-muted" style="font-size: 0.8rem;">{{ contract.price|floatformat:4 }} ETH</span>
+          </div>
+          <div class="col-3">
+              <h6 class="text-muted small mb-1 fw-normal">Temp Range</h6>
+              <span class="d-block fw-bold text-danger" style="font-size: 0.9rem;">
+                  {{ contract.min_temp }}°C – {{ contract.max_temp }}°C
+              </span>
+          </div>
+      </div>
+
+      {% if contract.status == 'Rejected' %}
+      <div class="mt-3 p-2 bg-light border-start border-danger border-3 rounded">
+          <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.65rem;">Rejection Reason:</small>
+          <span class="text-danger small">{{ contract.rejection_refund_reason }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-md-3 d-flex flex-column align-items-center justify-content-center gap-2">
+      
+      <button
+        class="btn btn-sm btn-outline-info fs-6 w-75"
+        hx-get="{% url 'contract_details_modal' contract.contract_id %}"
+        hx-target="#modal-body-details"
+        data-bs-toggle="modal"
+        data-bs-target="#detailsModal">
+        Details
+      </button>
+    
+      {% if contract.status == 'Pending' and request.user.role == 'Seller' %} 
+      <button
+        class="btn btn-primary btn-sm fs-6 w-75"
+        hx-get="{% url 'activate_contract_modal' contract.contract_id %}"
+        hx-target="#modal-body"
+        data-bs-toggle="modal"
+        data-bs-target="#mainModal">
+        Activate
+      </button>
+
+      <button
+        class="btn btn-outline-danger btn-sm fs-6 w-75"
+        hx-get="{% url 'reject_contract_modal' contract.contract_id %}"
+        hx-target="#modal-body"
+        data-bs-toggle="modal"
+        data-bs-target="#mainModal">
+        Reject
+      </button>
+      {% endif %} 
+    </div>
+  </div>
+</div>

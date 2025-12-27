@@ -1,0 +1,48 @@
+<form
+  hx-post="{% url 'reject_contract' contract.contract_id %}"
+  hx-target="#contract-{{ contract.contract_id }}"
+  hx-swap="outerHTML"
+  method="POST"
+>
+  {% csrf_token %}
+
+  <div class="modal-header">
+    <h5 class="modal-title">Reject Contract</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  </div>
+
+  <div class="modal-body">
+    <label class="form-label">Reason for Rejection</label>
+
+    <select
+      class="form-select mb-3"
+      name="reason_code"
+      id="rejectReason"
+      required
+      hx-on="change:
+        this.value === 'other'
+        ? document.getElementById('otherReason').classList.remove('d-none')
+        : document.getElementById('otherReason').classList.add('d-none')
+      "
+    >
+      <option value="">Select reason</option>
+      <option value="insufficient_inventory">Insufficient Inventory</option>
+      <option value="no_vehicle">No Vehicle Available</option>
+      <option value="delivery_queue_full">Delivery Queue Full</option>
+      <option value="other">Other</option>
+    </select>
+
+    <textarea
+      class="form-control d-none"
+      id="otherReason"
+      name="reason_text"
+      placeholder="Provide additional details"
+    ></textarea>
+  </div>
+
+  <div class="modal-footer">
+    <button type="submit" class="btn btn-danger">
+      Confirm Rejection
+    </button>
+  </div>
+</form>
