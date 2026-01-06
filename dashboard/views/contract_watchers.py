@@ -12,7 +12,9 @@ from .notify_functions import create_alert, get_summarized_log_data
 from .contract_functions import execute_onchain_action, create_shipment_log, resolve_contract
 ADAFRUIT_IO_USERNAME = os.getenv("ADAFRUIT_IO_USERNAME")
 ADAFRUIT_IO_KEY = os.getenv("ADAFRUIT_IO_KEY")
-aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+# aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+
+
 CHECK_INTERVAL_SECONDS = 12
 LOG_GEN_INTERVAL_CYCLES = 5  
 TEMP_LOG_THRESHOLD = 1.0          
@@ -23,12 +25,19 @@ _active_watchers = {}
 _active_iot_fetchers = {}
 _fetcher_stop_events = {}
 _lock = threading.Lock()
+_aio_client = None
 stop_event = Event()
 def log_info(msg): print(f"[WATCHER/INFO] {msg}")
 def log_warn(msg): print(f"[WATCHER/WARN] {msg}")
 def log_err(msg): print(f"[WATCHER/ERROR] {msg}")
 def log_iot(msg): print(f"[IOT/INFO] {msg}")
 def log_iot_warn(msg): print(f"[IOT/WARN] {msg}")
+
+def get_aio():
+    global _aio_client
+    if _aio_client is None:
+        _aio_client = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
+    return _aio_client
 
 def ensure_aware(dt):
     if dt is None:
@@ -38,6 +47,7 @@ def ensure_aware(dt):
 def fetch_adafruit_iot_data():
 
     try:
+        aio = get_aio()
         temp_feed = aio.receive('text-feed')
         temperature = float(temp_feed.value) if temp_feed and temp_feed.value is not None else None
 

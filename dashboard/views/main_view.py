@@ -9,30 +9,8 @@ import threading
 from datetime import datetime, timedelta
 import json
 
-from dotenv import load_dotenv
-from eth_account import Account
 from web3 import Web3
-from web3.exceptions import ContractLogicError
 from decimal import Decimal
-from solcx import compile_source, install_solc, set_solc_version
-from Adafruit_IO import Client
-from Adafruit_IO import RequestError, AdafruitIOError
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    Image,
-    PageBreak,
-    KeepTogether,
-)
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
