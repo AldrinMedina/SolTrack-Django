@@ -192,7 +192,7 @@ sellerSelect.addEventListener("change", function () {
     qtyInput.addEventListener("input", function () {
     const q = parseInt(this.value);
     const unitPrice  = parseFloat(prodPrice.value); // price per unit
-    const serviceFee = parseFloat(document.getElementById("serviceCharge").value || "0");
+    const serviceFee = parseFloat(document.getElementById("serviceCharge").value || "0.005");
 
     if (!q || q < 1) {
         finalPrice.value = "";
