@@ -6,10 +6,11 @@ from web3 import Web3
 # ----------------------------------------------------------------------
 # RPC / NETWORK
 # ----------------------------------------------------------------------
-rpc_url = os.getenv("TESTNET_RPC_URL", "http://127.0.0.1:7545")
+rpc_url = os.getenv("TESTNET_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com")
 
 if not rpc_url:
     raise RuntimeError("TESTNET_RPC_URL is not set")
+
 
 # Detect chain
 CHAIN_ID = 11155111 if "sepolia" in rpc_url.lower() else 1337
@@ -33,3 +34,5 @@ GAS_PRICE_GWEI = int(os.getenv("GAS_PRICE_GWEI", 5))
 # WEB3 INSTANCE
 # ----------------------------------------------------------------------
 web3 = Web3(Web3.HTTPProvider(rpc_url))
+print("RPC URL:", rpc_url)
+print("Chain ID from node:", web3.eth.chain_id)
