@@ -13,7 +13,7 @@ if not rpc_url:
 
 
 # Detect chain
-CHAIN_ID = 11155111 if "sepolia" in rpc_url.lower() else 1337
+CHAIN_ID = int(os.getenv("CHAIN_ID", 11155111))
 
 # ----------------------------------------------------------------------
 # DEPLOYER
