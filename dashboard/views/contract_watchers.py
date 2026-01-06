@@ -57,13 +57,13 @@ def fetch_adafruit_iot_data():
         print(f"[IOT FETCH] Error fetching from Adafruit: {e}")
         return None
 
-def _iot_fetcher_loop(contract_id):
+def _iot_fetcher_loop(contract_id, stop_event):
     last_heartbeat_time = None 
     last_logged_temp = None
     current_stable_temp = None
     stable_temp_start_time = None
 
-    while not _stop_event.is_set():
+    while not stop_event.is_set():
         try:
             contract_db = Contract.objects.select_related('IoT_Assigned').get(pk=contract_id)
             
@@ -72,13 +72,13 @@ def _iot_fetcher_loop(contract_id):
 
             device = contract_db.IoT_Assigned
             if not device:
-                if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
+                if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
                     break
                 continue
 
             temp = fetch_adafruit_iot_data()
             if temp is None:
-                if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
+                if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
                     break
                 continue
 
@@ -122,10 +122,10 @@ def _iot_fetcher_loop(contract_id):
         except Contract.DoesNotExist:
             break
         except Exception:
-            if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
+            if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
                 break
 
-        if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
+        if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS):
             break
 
     with _lock:
@@ -139,7 +139,7 @@ def _watcher_loop(contract_id):
     log_cycle_counter = 0
     is_offline = False 
     
-    while not _stop_event.is_set():
+    while not stop_event.is_set():
         try:
             with transaction.atomic():
                 contract_db = Contract.objects.select_for_update().get(pk=contract_id)
@@ -148,7 +148,7 @@ def _watcher_loop(contract_id):
 
                 device = contract_db.IoT_Assigned
                 if not device:
-                    if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
+                    if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
                     continue
 
                 now = timezone.now()
@@ -173,7 +173,7 @@ def _watcher_loop(contract_id):
             
                     consecutive_breach_count = 0
                     breach_start_time = None
-                    if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
+                    if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
                     continue 
                 
                 if is_offline:
@@ -237,7 +237,7 @@ def _watcher_loop(contract_id):
                                 execute_chain=True   
                             )
                         except Exception:
-                            if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
+                            if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
                             continue
                         return 
                         
@@ -277,7 +277,7 @@ def _watcher_loop(contract_id):
         except Exception:
             pass
 
-        if _stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
+        if stop_event.wait(timeout=CHECK_INTERVAL_SECONDS): break
 
     with _lock:
         _active_watchers.pop(contract_id, None)

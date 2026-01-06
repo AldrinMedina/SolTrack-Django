@@ -36,7 +36,10 @@ from dashboard.models import CustomUser
 
 from .config import web3, CHAIN_ID, GAS_PRICE_GWEI, DEPLOYER_ADDRESS
 from .notify_functions import create_alert
-from .contract_watchers import start_watcher, start_iot_fetcher, log_info, log_warn, log_err, log_iot, log_iot_warn
+from .notify_functions import create_alert
+# Avoid importing contract_watchers at module import time to reduce startup
+# memory/CPU. We will import the needed functions lazily inside the activation
+# code path.
 from .contract_functions import (
     attach_iot_device_to_contract,
     detach_iot_device_from_contract,
@@ -380,6 +383,8 @@ def activate_contract_view(request, contract_id):
             contract.status = "Active"
             contract.start_date = timezone.now()
             contract.save(update_fields=["status", "start_date"])
+            # Lazy import to avoid heavy watcher imports until needed
+            from .contract_watchers import start_watcher, start_iot_fetcher
             start_watcher(contract_id)
             start_iot_fetcher(contract_id)
 
