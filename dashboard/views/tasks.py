@@ -41,7 +41,7 @@ def activate_contract_task(contract_id, device_id):
         deployed_addr, abi_json, deploy_receipt = deploy_contract_on_chain(contract)
 
         price_wei = int(Decimal(contract.price) * 10**18)
-        service_fee_wei = Web3.to_wei(5, "ether")
+        service_fee_wei = Web3.to_wei(0.005, "ether")
         total_escrow = price_wei + service_fee_wei
 
         escrow_receipt = send_payment(
