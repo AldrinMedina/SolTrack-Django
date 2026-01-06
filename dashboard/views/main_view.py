@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.db.models import Avg, Min, Max, Q, F
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
@@ -33,6 +33,7 @@ from ..models import (
     Alert,
 )
 from dashboard.models import CustomUser
+from dashboard.forms import ProductForm
 
 from .config import web3, CHAIN_ID, GAS_PRICE_GWEI, DEPLOYER_ADDRESS
 from .notify_functions import create_alert

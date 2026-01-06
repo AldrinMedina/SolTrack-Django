@@ -1,1 +1,1 @@
-web: gunicorn myproject.wsgi:application --bind 0.0.0.0:$PORT
+web: gunicorn SolTrack.wsgi:application --workers=1 --timeout=120 --bind 0.0.0.0:$PORT

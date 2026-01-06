@@ -1,8 +1,9 @@
-from web3 import Web3
 import os
+from web3 import Web3
+from dashboard.views.config import web3
 
-GANACHE_RPC = "HTTP://127.0.0.1:7545"
-os.getenv("TESTNET_RPC_URL", "http://127.0.0.1:7545")
+# Fallback RPC if config fails; keep minimal to avoid extra imports
+GANACHE_RPC = os.getenv("TESTNET_RPC_URL", "http://127.0.0.1:7545")
 
 def get_eth_balance(address):
     try:
