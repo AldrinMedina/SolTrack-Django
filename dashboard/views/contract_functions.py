@@ -13,6 +13,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Avg, Min, Max 
+from django.shortcuts import render, get_object_or_404
+from django.template.loader import render_to_string
 from ..models import Contract, IoTDevice, ContractAddresses, ShipmentLog, IoTData, IoTDataHistory
 from .config import (
     web3,
@@ -457,7 +459,7 @@ def send_payment(to_address, amount_wei):
 
         signed = web3.eth.account.sign_transaction(tx, DEPLOYER_PRIVATE_KEY)
         tx_hash = web3.eth.send_raw_transaction(signed.raw_transaction)
-        receiptreceipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
        
         return receipt
 
